@@ -56,3 +56,7 @@ jobs:
         chart: true
         amend: true
       continue-on-error: true
+    
+    - name: Update goreportcard
+      uses: creekorful/goreportcard-action@v1.0
+      continue-on-error: true
