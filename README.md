@@ -6,7 +6,7 @@
 
 # pglive
 
-PostgreSQL live database unit testing.
+PostgreSQL live database unit testing
 
 ## Installation
 
