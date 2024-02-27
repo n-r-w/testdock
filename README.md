@@ -2,7 +2,7 @@
 [![Go Coverage](https://github.com/n-r-w/pglive/wiki/coverage.svg)](https://raw.githack.com/wiki/n-r-w/pglive/coverage.html)
 ![CI Status](https://github.com/n-r-w/pglive/actions/workflows/go.yml/badge.svg)
 [![Stability](http://badges.github.io/stability-badges/dist/stable.svg)](http://github.com/badges/stability-badges)
-[![Go Report](https://goreportcard.com/badge/github.com/n-r-w/pglive)](https://goreportcard.com/badge/github.com/n-r-w/pglive?v=6b996d51d6235dbae980d0120d11be6ffd65851f)
+[![Go Report](https://goreportcard.com/badge/github.com/n-r-w/pglive?v=6b996d51d6235dbae980d0120d11be6ffd65851f)](https://goreportcard.com/badge/github.com/n-r-w/pglive)
 
 # pglive
 
