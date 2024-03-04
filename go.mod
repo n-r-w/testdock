@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.5.3
+	github.com/jackc/pgx/v5 v5.5.4
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/pressly/goose/v3 v3.18.0
 	go.uber.org/multierr v1.11.0
