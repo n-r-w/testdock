@@ -102,6 +102,13 @@ func WithDockerPortMapping(dockerPortMapping string) Option {
 	}
 }
 
+// WithDockerSocketEndpoint sets the docker socket endpoint for connecting to the docker daemon.
+func WithDockerSocketEndpoint(dockerSocketEndpoint string) Option {
+	return func(o *testDBOptions) {
+		o.dockerSocketEndpoint = dockerSocketEndpoint
+	}
+}
+
 // WithForceDockerMode forces the tests to run in docker.
 func WithForceDockerMode() Option {
 	return func(o *testDBOptions) {
@@ -118,10 +125,11 @@ func WithRetryTimeout(retryTimeout time.Duration) Option {
 }
 
 type testDBOptions struct {
-	retryTimeout      time.Duration
-	dockerImage       string
-	dockerPortMapping string
-	forceDockerMode   bool
+	retryTimeout         time.Duration
+	dockerImage          string
+	dockerPortMapping    string
+	dockerSocketEndpoint string
+	forceDockerMode      bool
 
 	host     string
 	port     string
@@ -255,8 +263,12 @@ func NewTDB(tb testing.TB, opt ...Option) (*TestDB, error) { //nolint:gocognit
 	}
 
 	if dockerMode {
+		if options.dockerSocketEndpoint == "" {
+			options.dockerSocketEndpoint = os.Getenv("DOCKER_SOCKET_ENDPOINT")
+		}
+
 		tb.Log("using docker test db")
-		db, err = newDockerTestDB(tb, options.dockerImage, options.dockerPortMapping, options.database, options.retryTimeout)
+		db, err = newDockerTestDB(tb, options.dockerImage, options.dockerPortMapping, options.database, options.dockerSocketEndpoint, options.retryTimeout)
 	} else {
 		tb.Log("using real test db")
 		db, err = newRealTestDB(tb, options.user, options.password, options.host, options.port, options.database, options.retryTimeout, createDB)
@@ -377,7 +389,7 @@ const (
 )
 
 // getDockerResources returns a pool and a resource for creating a test database in docker.
-func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName string) (*dockertest.Pool, *dockertest.Resource, error) { //nolint:gocognit
+func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, dockerSocketEndpoint string) (*dockertest.Pool, *dockertest.Resource, error) { //nolint:gocognit
 	globalDockerMu.Lock()
 	defer globalDockerMu.Unlock()
 
@@ -394,7 +406,7 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName str
 
 	if globalDockerCount == 0 {
 		var err error
-		globalDockerPool, err = dockertest.NewPool("")
+		globalDockerPool, err = dockertest.NewPool(dockerSocketEndpoint)
 		if err != nil {
 			return nil, nil, fmt.Errorf("dockertest NewPool: %w", err)
 		}
@@ -502,8 +514,8 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName str
 }
 
 // newDockerTestDB creates a test database in docker.
-func newDockerTestDB(tb testing.TB, postgresImage, hostPort, databaseName string, retryTimeout time.Duration) (*TestDB, error) {
-	pool, resource, err := getDockerResources(tb, postgresImage, hostPort, databaseName)
+func newDockerTestDB(tb testing.TB, postgresImage, hostPort, databaseName, dockerSocketEndpoint string, retryTimeout time.Duration) (*TestDB, error) {
+	pool, resource, err := getDockerResources(tb, postgresImage, hostPort, databaseName, dockerSocketEndpoint)
 	if err != nil {
 		return nil, err
 	}
