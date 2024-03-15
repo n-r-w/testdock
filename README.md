@@ -25,11 +25,10 @@ There are two operating modes: using Docker and using an external database.
 ### Using Docker
 
 In this case, the default mapping for PostgreSQL on the host is to port 5433 to avoid conflicts with local PostgreSQL.
+For Docker Desktop on Linux or macOS, you should define `DOCKER_SOCKET_ENDPOINT` environment variable with:
 
-Known limitations in Docker mode:
-
-- In docker mode, this package uses <https://github.com/ory/dockertest>. According to [Cannot find /var/run/docker.sock on Mac/Windows](https://github.com/ory/dockertest/issues/413), dockertest does not support macOS, Windows and Docker Desktop. It is recommended to use the external database mode in these cases.
-- The docker container will be deleted after the test execution is stopped on a breakpoint and not continued.
+- Linux: `unix:///home/<user>/.docker/desktop/docker.sock`
+- macOS: `unix:///Users/<USER>/.docker/run/docker.sock`
 
 ### Using an external database
 
