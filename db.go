@@ -124,7 +124,15 @@ func WithRetryTimeout(retryTimeout time.Duration) Option {
 	}
 }
 
+// WithLogger sets the logger for the test database.
+func WithLogger(logger Logger) Option {
+	return func(o *testDBOptions) {
+		o.logger = logger
+	}
+}
+
 type testDBOptions struct {
+	logger               Logger
 	retryTimeout         time.Duration
 	dockerImage          string
 	dockerPortMapping    string
@@ -152,18 +160,22 @@ func GetPool(tb testing.TB, migrationsDir string, opt ...Option) *pgxpool.Pool {
 		o(&options)
 	}
 
+	if options.logger == nil {
+		options.logger = defaultLogger{tb}
+	}
+
 	tDB, err := NewTDB(tb, opt...)
 	if err != nil {
-		tb.Fatal(err)
+		options.logger.Fatal(err)
 	}
 
 	if err = tDB.MigrationsUp(migrationsDir, ""); err != nil {
-		tb.Fatal(err)
+		options.logger.Fatal(err)
 	}
 
 	db, err := tDB.connectDB(tDB.DSN(), options.retryTimeout)
 	if err != nil {
-		tb.Fatal(err)
+		options.logger.Fatal(err)
 	}
 
 	tb.Cleanup(func() { db.Close() })
@@ -267,10 +279,10 @@ func NewTDB(tb testing.TB, opt ...Option) (*TestDB, error) { //nolint:gocognit
 			options.dockerSocketEndpoint = os.Getenv("DOCKER_SOCKET_ENDPOINT")
 		}
 
-		tb.Log("using docker test db")
-		db, err = newDockerTestDB(tb, options.dockerImage, options.dockerPortMapping, options.database, options.dockerSocketEndpoint, options.retryTimeout)
+		options.logger.Log("using docker test db")
+		db, err = newDockerTestDB(tb, options.logger, options.dockerImage, options.dockerPortMapping, options.database, options.dockerSocketEndpoint, options.retryTimeout)
 	} else {
-		tb.Log("using real test db")
+		options.logger.Log("using real test db")
 		db, err = newRealTestDB(tb, options.user, options.password, options.host, options.port, options.database, options.retryTimeout, createDB)
 	}
 
@@ -293,8 +305,8 @@ func (d *TestDB) DSN() string {
 
 // MigrationsUp applies migrations to the database.
 func (d *TestDB) MigrationsUp(migrationsDir, schema string) error {
-	d.t.Log("migrations up start")
-	defer d.t.Log("migrations up end")
+	d.options.logger.Log("migrations up start")
+	defer d.options.logger.Log("migrations up end")
 
 	muGoose.Lock()
 	defer muGoose.Unlock()
@@ -327,7 +339,7 @@ func (d *TestDB) Close() (err error) {
 
 	if d.deleteDBname != "" {
 		// remove the database created before applying the migrations
-		d.t.Logf("deleting test db %s", d.deleteDBname)
+		d.options.logger.Logf("deleting test db %s", d.deleteDBname)
 
 		db, err1 := d.connectPostgresDB(d.options.user, d.options.password, d.options.host, d.options.port, d.options.retryTimeout)
 		defer func() {
@@ -355,7 +367,7 @@ func (d *TestDB) Close() (err error) {
 
 		d.deleteDBname = ""
 		if err1 == nil {
-			d.t.Logf("test db %s deleted", d.deleteDBname)
+			d.options.logger.Logf("test db %s deleted", d.deleteDBname)
 		}
 	}
 
@@ -368,9 +380,9 @@ func (d *TestDB) Close() (err error) {
 
 func (d *TestDB) logClose() {
 	if err := d.Close(); err != nil {
-		d.t.Logf("failed to close test db: %v", err)
+		d.options.logger.Logf("failed to close test db: %v", err)
 	} else {
-		d.t.Log("test db closed")
+		d.options.logger.Log("test db closed")
 	}
 }
 
@@ -389,7 +401,7 @@ const (
 )
 
 // getDockerResources returns a pool and a resource for creating a test database in docker.
-func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, dockerSocketEndpoint string) (*dockertest.Pool, *dockertest.Resource, error) { //nolint:gocognit
+func getDockerResources(tb testing.TB, logger Logger, postgresImage, hostPort, databaseName, dockerSocketEndpoint string) (*dockertest.Pool, *dockertest.Resource, error) { //nolint:gocognit
 	globalDockerMu.Lock()
 	defer globalDockerMu.Unlock()
 
@@ -400,7 +412,7 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, do
 
 		if globalDockerCount == 0 {
 			_ = globalDockerPool.Purge(globalDockerResource) // error is not important
-			tb.Log("dockertest resources purged")
+			logger.Log("dockertest resources purged")
 		}
 	})
 
@@ -422,7 +434,7 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, do
 		}
 		for _, env := range proxyEnv {
 			if os.Getenv(env) != "" {
-				tb.Logf("unset proxy env %s", env)
+				logger.Logf("unset proxy env %s", env)
 				_ = os.Unsetenv(env)
 			}
 		}
@@ -485,7 +497,7 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, do
 					globalDockerPool = nil
 					return nil, nil, fmt.Errorf("dockertest RunWithOptions: %w", err)
 				}
-				tb.Logf("port is already allocated, try next port %d, database %s", port, databaseName)
+				logger.Logf("port is already allocated, try next port %d, database %s", port, databaseName)
 				hostPort = strconv.Itoa(port + 1)
 				continue
 			}
@@ -495,7 +507,7 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, do
 				break
 			}
 
-			tb.Logf("dockertest RunWithOptions failed, database %s, attempt %d, error %v", databaseName, attempt, err)
+			logger.Logf("dockertest RunWithOptions failed, database %s, attempt %d, error %v", databaseName, attempt, err)
 			time.Sleep(sleepTime)
 		}
 
@@ -504,9 +516,9 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, do
 			return nil, nil, fmt.Errorf("dockertest RunWithOptions: %w", err)
 		}
 
-		tb.Logf("dockertest resources created, database %s", databaseName)
+		logger.Logf("dockertest resources created, database %s", databaseName)
 	} else {
-		tb.Logf("dockertest using existing resources, database %s", databaseName)
+		logger.Logf("dockertest using existing resources, database %s", databaseName)
 	}
 
 	globalDockerCount++
@@ -514,8 +526,8 @@ func getDockerResources(tb testing.TB, postgresImage, hostPort, databaseName, do
 }
 
 // newDockerTestDB creates a test database in docker.
-func newDockerTestDB(tb testing.TB, postgresImage, hostPort, databaseName, dockerSocketEndpoint string, retryTimeout time.Duration) (*TestDB, error) {
-	pool, resource, err := getDockerResources(tb, postgresImage, hostPort, databaseName, dockerSocketEndpoint)
+func newDockerTestDB(tb testing.TB, logger Logger, postgresImage, hostPort, databaseName, dockerSocketEndpoint string, retryTimeout time.Duration) (*TestDB, error) {
+	pool, resource, err := getDockerResources(tb, logger, postgresImage, hostPort, databaseName, dockerSocketEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +565,7 @@ func newRealTestDB(tb testing.TB, userName, password, host, port, databaseName s
 
 // connectDB connects to the database with retries.
 func (d *TestDB) connectDB(dbURL string, retryTimeout time.Duration) (*pgxpool.Pool, error) {
-	d.t.Logf("connecting to test db %s", dbURL)
+	d.options.logger.Logf("connecting to test db %s", dbURL)
 
 	var (
 		db  *pgxpool.Pool
@@ -588,7 +600,7 @@ func (d *TestDB) initDatabase(userName, password, host, port, databaseName strin
 	retryTimeout time.Duration, createDB bool,
 ) (err error) {
 	if createDB {
-		d.t.Logf("creating new test db %s", databaseName)
+		d.options.logger.Logf("creating new test db %s", databaseName)
 
 		postgresDB, err := d.connectPostgresDB(userName, password, host, port, retryTimeout)
 		if err != nil {
@@ -601,7 +613,7 @@ func (d *TestDB) initDatabase(userName, password, host, port, databaseName strin
 			return fmt.Errorf("create db: %w", err)
 		}
 
-		d.t.Logf("new test db %s created", databaseName)
+		d.options.logger.Logf("new test db %s created", databaseName)
 	}
 
 	d.url = postgresURL(userName, password, host, port, databaseName)
