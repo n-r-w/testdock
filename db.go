@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
-	"github.com/pressly/goose/v3"
 	"go.uber.org/multierr"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx postgres driver
@@ -35,13 +34,14 @@ const (
 
 // TestDB creates a connection to a temporary test cluster databasepg, allows you to deploy migrations on it and run tests.
 type TestDB struct {
-	t              testing.TB
-	logger         Logger
-	dockerResource *dockertest.Resource
-	dockerPool     *dockertest.Pool
-	url            string
-	deleteDBname   string
-	retryTimeout   time.Duration
+	t               testing.TB
+	logger          Logger
+	migratorFactory MigratorFactory
+	dockerResource  *dockertest.Resource
+	dockerPool      *dockertest.Pool
+	url             string
+	deleteDBname    string
+	retryTimeout    time.Duration
 
 	cleanConnectFunc func() (*pgxpool.Pool, error)
 }
@@ -134,8 +134,17 @@ func WithLogger(logger Logger) Option {
 	}
 }
 
+// WithMigratorFactory sets the migrator factory for the test database.
+// The default is goose.
+func WithMigratorFactory(migratorFactory MigratorFactory) Option {
+	return func(o *testDBOptions) {
+		o.migratorFactory = migratorFactory
+	}
+}
+
 type testDBOptions struct {
 	logger               Logger
+	migratorFactory      MigratorFactory
 	retryTimeout         time.Duration
 	dockerImage          string
 	dockerPortMapping    string
@@ -200,6 +209,10 @@ func NewTDB(tb testing.TB, opt ...Option) (*TestDB, error) { //nolint:gocognit
 
 	if options.logger == nil {
 		options.logger = &defaultLogger{t: tb}
+	}
+
+	if options.migratorFactory == nil {
+		options.migratorFactory = GooseMigratorFactory
 	}
 
 	if options.dockerImage == "" {
@@ -278,10 +291,14 @@ func NewTDB(tb testing.TB, opt ...Option) (*TestDB, error) { //nolint:gocognit
 		}
 
 		options.logger.Logf("using docker test db")
-		db, err = newDockerTestDB(tb, options.logger, options.dockerImage, options.dockerPortMapping, options.database, options.dockerSocketEndpoint, options.retryTimeout)
+		db, err = newDockerTestDB(tb, options.logger, options.migratorFactory,
+			options.dockerImage, options.dockerPortMapping, options.database,
+			options.dockerSocketEndpoint, options.retryTimeout)
 	} else {
 		options.logger.Logf("using real test db")
-		db, err = newRealTestDB(tb, options.logger, options.user, options.password, options.host, options.port, options.database, options.retryTimeout, createDB)
+		db, err = newRealTestDB(tb, options.logger, options.migratorFactory,
+			options.user, options.password, options.host, options.port,
+			options.database, options.retryTimeout, createDB)
 	}
 
 	if db != nil {
@@ -325,15 +342,12 @@ func (d *TestDB) MigrationsUp(migrationsDir, schema string) error {
 		}
 	}
 
-	p, err := goose.NewProvider(goose.DialectPostgres, conn, os.DirFS(migrationsDir),
-		goose.WithLogger(&gooseLogger{l: d.logger}),
-		goose.WithVerbose(true),
-	)
+	migrator, err := d.migratorFactory(dsn, migrationsDir, d.logger)
 	if err != nil {
-		return fmt.Errorf("new goose provider: %w", err)
+		return fmt.Errorf("new migrator: %w", err)
 	}
 
-	if _, err := p.Up(context.Background()); err != nil {
+	if err = migrator.Up(context.Background()); err != nil {
 		return fmt.Errorf("up migrations: %w", err)
 	}
 
@@ -535,7 +549,9 @@ func getDockerResources(tb testing.TB, logger Logger, postgresImage, hostPort, d
 }
 
 // newDockerTestDB creates a test database in docker.
-func newDockerTestDB(tb testing.TB, logger Logger, postgresImage, hostPort, databaseName, dockerSocketEndpoint string, retryTimeout time.Duration) (*TestDB, error) {
+func newDockerTestDB(tb testing.TB, logger Logger, migratorFactory MigratorFactory,
+	postgresImage, hostPort, databaseName, dockerSocketEndpoint string, retryTimeout time.Duration,
+) (*TestDB, error) {
 	pool, resource, err := getDockerResources(tb, logger, postgresImage, hostPort, databaseName, dockerSocketEndpoint)
 	if err != nil {
 		return nil, err
@@ -547,6 +563,7 @@ func newDockerTestDB(tb testing.TB, logger Logger, postgresImage, hostPort, data
 		t:                tb,
 		logger:           logger,
 		retryTimeout:     retryTimeout,
+		migratorFactory:  migratorFactory,
 		cleanConnectFunc: nil, // non nessary for docker
 	}
 
@@ -561,13 +578,16 @@ func newDockerTestDB(tb testing.TB, logger Logger, postgresImage, hostPort, data
 }
 
 // newRealTestDB creates a test database on the host machine.
-func newRealTestDB(tb testing.TB, logger Logger, userName, password, host, port, databaseName string, retryTimeout time.Duration, createDB bool) (*TestDB, error) {
+func newRealTestDB(tb testing.TB, logger Logger, migratorFactory MigratorFactory,
+	userName, password, host, port, databaseName string, retryTimeout time.Duration, createDB bool,
+) (*TestDB, error) {
 	var (
 		err error
 		d   = &TestDB{
-			t:            tb,
-			retryTimeout: retryTimeout,
-			logger:       logger,
+			t:               tb,
+			retryTimeout:    retryTimeout,
+			logger:          logger,
+			migratorFactory: migratorFactory,
 		}
 	)
 

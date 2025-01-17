@@ -31,3 +31,15 @@ func (l gooseLogger) Fatalf(format string, v ...any) {
 func (l gooseLogger) Printf(format string, v ...any) {
 	l.l.Logf(format, v...)
 }
+
+type golangMigrateLogger struct {
+	l Logger
+}
+
+func (g *golangMigrateLogger) Printf(format string, v ...interface{}) {
+	g.l.Logf(format, v...)
+}
+
+func (g *golangMigrateLogger) Verbose() bool {
+	return true
+}
