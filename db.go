@@ -36,11 +36,14 @@ const (
 // TestDB creates a connection to a temporary test cluster databasepg, allows you to deploy migrations on it and run tests.
 type TestDB struct {
 	t              testing.TB
-	options        testDBOptions
+	logger         Logger
 	dockerResource *dockertest.Resource
 	dockerPool     *dockertest.Pool
 	url            string
 	deleteDBname   string
+	retryTimeout   time.Duration
+
+	cleanConnectFunc func() (*pgxpool.Pool, error)
 }
 
 // Option option for creating a test database.
@@ -155,27 +158,18 @@ var (
 func GetPool(tb testing.TB, migrationsDir string, opt ...Option) *pgxpool.Pool {
 	tb.Helper()
 
-	options := testDBOptions{}
-	for _, o := range opt {
-		o(&options)
-	}
-
-	if options.logger == nil {
-		options.logger = defaultLogger{tb}
-	}
-
 	tDB, err := NewTDB(tb, opt...)
 	if err != nil {
-		options.logger.Fatal(err)
+		tDB.logger.Fatal(err)
 	}
 
 	if err = tDB.MigrationsUp(migrationsDir, ""); err != nil {
-		options.logger.Fatal(err)
+		tDB.logger.Fatal(err)
 	}
 
-	db, err := tDB.connectDB(tDB.DSN(), options.retryTimeout)
+	db, err := tDB.connectDB(tDB.DSN())
 	if err != nil {
-		options.logger.Fatal(err)
+		tDB.logger.Fatal(err)
 	}
 
 	tb.Cleanup(func() { db.Close() })
@@ -203,6 +197,10 @@ func NewTDB(tb testing.TB, opt ...Option) (*TestDB, error) { //nolint:gocognit
 		dockerMode = true
 		createDB   = false
 	)
+
+	if options.logger == nil {
+		options.logger = &defaultLogger{t: tb}
+	}
 
 	if options.dockerImage == "" {
 		options.dockerImage = defaultDockerImage
@@ -283,11 +281,10 @@ func NewTDB(tb testing.TB, opt ...Option) (*TestDB, error) { //nolint:gocognit
 		db, err = newDockerTestDB(tb, options.logger, options.dockerImage, options.dockerPortMapping, options.database, options.dockerSocketEndpoint, options.retryTimeout)
 	} else {
 		options.logger.Log("using real test db")
-		db, err = newRealTestDB(tb, options.user, options.password, options.host, options.port, options.database, options.retryTimeout, createDB)
+		db, err = newRealTestDB(tb, options.logger, options.user, options.password, options.host, options.port, options.database, options.retryTimeout, createDB)
 	}
 
 	if db != nil {
-		db.options = options
 		if createDB && !dockerMode {
 			db.deleteDBname = options.database
 		}
@@ -305,8 +302,8 @@ func (d *TestDB) DSN() string {
 
 // MigrationsUp applies migrations to the database.
 func (d *TestDB) MigrationsUp(migrationsDir, schema string) error {
-	d.options.logger.Log("migrations up start")
-	defer d.options.logger.Log("migrations up end")
+	d.logger.Log("migrations up start")
+	defer d.logger.Log("migrations up end")
 
 	muGoose.Lock()
 	defer muGoose.Unlock()
@@ -337,11 +334,11 @@ func (d *TestDB) Close() (err error) {
 		d.dockerPool = nil
 	}
 
-	if d.deleteDBname != "" {
+	if d.deleteDBname != "" && d.cleanConnectFunc != nil {
 		// remove the database created before applying the migrations
-		d.options.logger.Logf("deleting test db %s", d.deleteDBname)
+		d.logger.Logf("deleting test db %s", d.deleteDBname)
 
-		db, err1 := d.connectPostgresDB(d.options.user, d.options.password, d.options.host, d.options.port, d.options.retryTimeout)
+		db, err1 := d.cleanConnectFunc()
 		defer func() {
 			db.Close()
 		}()
@@ -367,7 +364,7 @@ func (d *TestDB) Close() (err error) {
 
 		d.deleteDBname = ""
 		if err1 == nil {
-			d.options.logger.Logf("test db %s deleted", d.deleteDBname)
+			d.logger.Logf("test db %s deleted", d.deleteDBname)
 		}
 	}
 
@@ -380,9 +377,9 @@ func (d *TestDB) Close() (err error) {
 
 func (d *TestDB) logClose() {
 	if err := d.Close(); err != nil {
-		d.options.logger.Logf("failed to close test db: %v", err)
+		d.logger.Logf("failed to close test db: %v", err)
 	} else {
-		d.options.logger.Log("test db closed")
+		d.logger.Log("test db closed")
 	}
 }
 
@@ -533,13 +530,17 @@ func newDockerTestDB(tb testing.TB, logger Logger, postgresImage, hostPort, data
 	}
 
 	d := &TestDB{
-		dockerPool:     pool,
-		dockerResource: resource,
-		t:              tb,
+		dockerPool:       pool,
+		dockerResource:   resource,
+		t:                tb,
+		logger:           logger,
+		retryTimeout:     retryTimeout,
+		cleanConnectFunc: nil, // non nessary for docker
 	}
 
-	err = d.initDatabase(dockerUserName, dockerPassword, d.dockerResource.GetBoundIP(dockerPgPort), d.dockerResource.GetPort(dockerPgPort), databaseName,
-		retryTimeout, true)
+	err = d.initDatabase(
+		dockerUserName, dockerPassword, d.dockerResource.GetBoundIP(dockerPgPort),
+		d.dockerResource.GetPort(dockerPgPort), databaseName, true)
 	if err != nil {
 		_ = d.Close() // we need to clean up docker resources
 		return nil, err
@@ -548,15 +549,21 @@ func newDockerTestDB(tb testing.TB, logger Logger, postgresImage, hostPort, data
 }
 
 // newRealTestDB creates a test database on the host machine.
-func newRealTestDB(tb testing.TB, userName, password, host, port, databaseName string, retryTimeout time.Duration, createDB bool) (*TestDB, error) {
+func newRealTestDB(tb testing.TB, logger Logger, userName, password, host, port, databaseName string, retryTimeout time.Duration, createDB bool) (*TestDB, error) {
 	var (
 		err error
 		d   = &TestDB{
-			t: tb,
+			t:            tb,
+			retryTimeout: retryTimeout,
+			logger:       logger,
 		}
 	)
 
-	err = d.initDatabase(userName, password, host, port, databaseName, retryTimeout, createDB)
+	d.cleanConnectFunc = func() (*pgxpool.Pool, error) {
+		return d.connectPostgresDB(userName, password, host, port)
+	}
+
+	err = d.initDatabase(userName, password, host, port, databaseName, createDB)
 	if err != nil {
 		return nil, err
 	}
@@ -564,14 +571,14 @@ func newRealTestDB(tb testing.TB, userName, password, host, port, databaseName s
 }
 
 // connectDB connects to the database with retries.
-func (d *TestDB) connectDB(dbURL string, retryTimeout time.Duration) (*pgxpool.Pool, error) {
-	d.options.logger.Logf("connecting to test db %s", dbURL)
+func (d *TestDB) connectDB(dbURL string) (*pgxpool.Pool, error) {
+	d.logger.Logf("connecting to test db %s", dbURL)
 
 	var (
 		db  *pgxpool.Pool
 		ctx = context.Background()
 	)
-	err := retryConnect(retryTimeout, func() (err error) {
+	err := retryConnect(d.retryTimeout, func() (err error) {
 		db, err = pgxpool.New(ctx, dbURL)
 		if err != nil {
 			return err
@@ -590,19 +597,17 @@ func (d *TestDB) connectDB(dbURL string, retryTimeout time.Duration) (*pgxpool.P
 }
 
 // connectPostgresDB connects to the postgres database.
-func (d *TestDB) connectPostgresDB(userName, password, host, port string, retryTimeout time.Duration) (*pgxpool.Pool, error) {
+func (d *TestDB) connectPostgresDB(userName, password, host, port string) (*pgxpool.Pool, error) {
 	dbURL := postgresURL(userName, password, host, port, "postgres")
-	return d.connectDB(dbURL, retryTimeout)
+	return d.connectDB(dbURL)
 }
 
 // initDatabase creates a test database or connects to an existing one.
-func (d *TestDB) initDatabase(userName, password, host, port, databaseName string,
-	retryTimeout time.Duration, createDB bool,
-) (err error) {
+func (d *TestDB) initDatabase(userName, password, host, port, databaseName string, createDB bool) (err error) {
 	if createDB {
-		d.options.logger.Logf("creating new test db %s", databaseName)
+		d.logger.Logf("creating new test db %s", databaseName)
 
-		postgresDB, err := d.connectPostgresDB(userName, password, host, port, retryTimeout)
+		postgresDB, err := d.connectPostgresDB(userName, password, host, port)
 		if err != nil {
 			return err
 		}
@@ -613,7 +618,7 @@ func (d *TestDB) initDatabase(userName, password, host, port, databaseName strin
 			return fmt.Errorf("create db: %w", err)
 		}
 
-		d.options.logger.Logf("new test db %s created", databaseName)
+		d.logger.Logf("new test db %s created", databaseName)
 	}
 
 	d.url = postgresURL(userName, password, host, port, databaseName)
