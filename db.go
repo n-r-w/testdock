@@ -160,16 +160,16 @@ func GetPool(tb testing.TB, migrationsDir string, opt ...Option) *pgxpool.Pool {
 
 	tDB, err := NewTDB(tb, opt...)
 	if err != nil {
-		tDB.logger.Fatal(err)
+		tDB.logger.Fatalf("%v", err)
 	}
 
 	if err = tDB.MigrationsUp(migrationsDir, ""); err != nil {
-		tDB.logger.Fatal(err)
+		tDB.logger.Fatalf("%v", err)
 	}
 
 	db, err := tDB.connectDB(tDB.DSN())
 	if err != nil {
-		tDB.logger.Fatal(err)
+		tDB.logger.Fatalf("%v", err)
 	}
 
 	tb.Cleanup(func() { db.Close() })
@@ -277,10 +277,10 @@ func NewTDB(tb testing.TB, opt ...Option) (*TestDB, error) { //nolint:gocognit
 			options.dockerSocketEndpoint = os.Getenv("DOCKER_SOCKET_ENDPOINT")
 		}
 
-		options.logger.Log("using docker test db")
+		options.logger.Logf("using docker test db")
 		db, err = newDockerTestDB(tb, options.logger, options.dockerImage, options.dockerPortMapping, options.database, options.dockerSocketEndpoint, options.retryTimeout)
 	} else {
-		options.logger.Log("using real test db")
+		options.logger.Logf("using real test db")
 		db, err = newRealTestDB(tb, options.logger, options.user, options.password, options.host, options.port, options.database, options.retryTimeout, createDB)
 	}
 
@@ -302,8 +302,8 @@ func (d *TestDB) DSN() string {
 
 // MigrationsUp applies migrations to the database.
 func (d *TestDB) MigrationsUp(migrationsDir, schema string) error {
-	d.logger.Log("migrations up start")
-	defer d.logger.Log("migrations up end")
+	d.logger.Logf("migrations up start")
+	defer d.logger.Logf("migrations up end")
 
 	muGoose.Lock()
 	defer muGoose.Unlock()
@@ -320,12 +320,24 @@ func (d *TestDB) MigrationsUp(migrationsDir, schema string) error {
 	defer conn.Close()
 
 	if schema != "" {
-		if _, err := conn.Exec(fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %q`, schema)); err != nil {
+		if _, err = conn.Exec(fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %q`, schema)); err != nil {
 			return fmt.Errorf("create schema: %w", err)
 		}
 	}
 
-	return goose.Up(conn, migrationsDir)
+	p, err := goose.NewProvider(goose.DialectPostgres, conn, os.DirFS(migrationsDir),
+		goose.WithLogger(&gooseLogger{l: d.logger}),
+		goose.WithVerbose(true),
+	)
+	if err != nil {
+		return fmt.Errorf("new goose provider: %w", err)
+	}
+
+	if _, err := p.Up(context.Background()); err != nil {
+		return fmt.Errorf("up migrations: %w", err)
+	}
+
+	return nil
 }
 
 // Close closes the test database.
@@ -379,7 +391,7 @@ func (d *TestDB) logClose() {
 	if err := d.Close(); err != nil {
 		d.logger.Logf("failed to close test db: %v", err)
 	} else {
-		d.logger.Log("test db closed")
+		d.logger.Logf("test db closed")
 	}
 }
 
@@ -409,7 +421,7 @@ func getDockerResources(tb testing.TB, logger Logger, postgresImage, hostPort, d
 
 		if globalDockerCount == 0 {
 			_ = globalDockerPool.Purge(globalDockerResource) // error is not important
-			logger.Log("dockertest resources purged")
+			logger.Logf("dockertest resources purged")
 		}
 	})
 
