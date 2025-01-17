@@ -16,9 +16,33 @@ go get github.com/n-r-w/pglive@latest
 
 ## Introduction
 
-- This package is used with <https://github.com/jackc/pgx>, because it returns pgxpool.Pool for database operations.
-- Allow to use parallel unit tests. In this case, each test will have its own database.
-- Test database is created and deleted automatically after the test is finished.
+pglive is a Go package designed to simplify PostgreSQL database testing by providing:
+
+- Isolated test databases for parallel test execution
+- Automatic database creation and cleanup
+- Flexible configuration options for both Docker and external database setups
+- Support for multiple migration tools (gomigrate, goose) with custom migration support
+- Comprehensive connection pooling configuration
+- Detailed logging capabilities
+
+## Features
+
+- **Parallel Test Support**: Each test runs in its own isolated database instance
+- **Automatic Cleanup**: Databases are automatically created and removed
+- **Migration Support**:
+  - Built-in support for gomigrate and goose
+  - Custom migration tool integration via WithMigratorFactory
+- **Connection Management**:
+  - Configurable connection pooling
+  - Connection health checks
+  - Timeout and lifetime settings
+- **Logging**:
+  - Built-in structured logging
+  - Custom logger support
+- **Configuration Options**:
+  - Docker and external database support
+  - Environment variable and direct parameter configuration
+  - GitLab CI integration
 
 There are two operating modes: using Docker and using an external database.
 
@@ -65,7 +89,7 @@ Known limitations in external database mode:
 
 Default values:
 
-```
+```plaintext
 PostrgreSQL image: postgres:latest
 PostrgreSQL Host: 127.0.0.1
 PostrgreSQL port: 5432
@@ -76,24 +100,31 @@ Password: secret
 
 ## Usage example
 
+### Basic Usage
+
 ```go
 import (
   "testing"
+  "context"
 
   "github.com/jackc/pgx/v5/pgxpool"
   "github.com/n-r-w/pglive"
 )
 
 func Test_Example(t *testing.T) {
-    var db *pgxpool.Pool
-
+    t.Parallel()
+    
     // Create test database, run migrations and return a database connection
-    db = pglive.GetPool(t, "./migrations")
+    db := pglive.GetPool(t, "./migrations")
+    defer db.Close()
 
+    // Example query
     rows, err := db.Query(context.Background(), "SELECT name FROM test_table")
     if err != nil {
         t.Fatalf("error: %s", err)
     }
+    defer rows.Close()
+    
     for rows.Next() {
         var name string
         if err := rows.Scan(&name); err != nil {
@@ -105,3 +136,36 @@ func Test_Example(t *testing.T) {
     }
 }
 ```
+
+### Using Specific Migration Tool
+
+```go
+import (
+  "testing"
+  "time"
+
+  "github.com/jackc/pgx/v5/pgxpool"
+  "github.com/n-r-w/pglive"
+)
+
+func Test_WithGooseMigrations(t *testing.T) {
+    t.Parallel()
+    
+    db := pglive.GetPool(t, "./migrations/goose", 
+        pglive.WithMigratorFactory(pglive.GooseMigratorFactory),        
+    )
+    defer db.Close()
+    
+    // Test code...
+}
+
+func Test_WithGoMigrateMigrations(t *testing.T) {
+    t.Parallel()
+    
+    db := pglive.GetPool(t, "./migrations/gomigrate", 
+        pglive.WithMigratorFactory(pglive.GolangMigrateFactory),        
+    )
+    defer db.Close()
+    
+    // Test code...
+}
