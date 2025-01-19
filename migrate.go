@@ -22,6 +22,15 @@ type Migrator interface {
 	Up(ctx context.Context) error
 }
 
+var (
+	// GooseMigratePGX is a migrator for https://github.com/pressly/goose with pgx driver.
+	GooseMigratePGX = GooseMigrateFactory(goose.DialectPostgres, "pgx")
+	// GooseMigratePQ is a migrator for https://github.com/pressly/goose with pq driver.
+	GooseMigratePQ = GooseMigrateFactory(goose.DialectPostgres, "postgres")
+	// GooseMigrateMysql is a migrator for https://github.com/pressly/goose with mysql driver.
+	GooseMigrateMysql = GooseMigrateFactory(goose.DialectMySQL, "mysql")
+)
+
 // GooseMigrateFactory creates a new migrator for https://github.com/pressly/goose.
 func GooseMigrateFactory(dialect goose.Dialect, driver string) MigrateFactory {
 	return func(dsn, migrationsDir string, logger Logger) (Migrator, error) {
