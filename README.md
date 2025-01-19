@@ -13,7 +13,7 @@ TestDock is a Go library that simplifies database testing by providing an easy w
 - **Multiple Database Support**  
   - MongoDB: `GetMongoDatabase` function
   - PostgreSQL (with both `pgx` and `pq` drivers): `GetPgxPool` and `GetPqConn` functions
-  - MySQL: `GetMysqlConn` function
+  - MySQL: `GetMySQLConn` function
   - Any other SQL database supported by `database/sql` <https://go.dev/wiki/SQLDrivers>: `GetSQLConn` function
 
 - **Flexible Test Environment**
@@ -42,7 +42,7 @@ go get github.com/n-r-w/testdock/v2@latest
 
 - `GetPgxPool`: PostgreSQL connection pool (pgx driver)
 - `GetPqConn`: PostgreSQL connection (libpq driver)
-- `GetMysqlConn`: MySQL connection
+- `GetMySQLConn`: MySQL connection
 - `GetSQLConn`: Generic SQL database connection
 - `GetMongoDatabase`: MongoDB database
 
@@ -155,7 +155,7 @@ func TestMongoDB(t *testing.T) {
 ### Default connection strings
 
 - `DefaultPostgresDSN`: Default PostgreSQL connection string
-- `DefaultMysqlDSN`: Default MySQL connection string
+- `DefaultMySQLDSN`: Default MySQL connection string
 - `DefaultMongoDSN`: Default MongoDB connection string
 
 ## Migrations

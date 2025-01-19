@@ -9,9 +9,9 @@ import (
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 )
 
-// GetMysqlConn inits a test mysql database, applies migrations.
+// GetMySQLConn inits a test mysql database, applies migrations.
 // Use user root for docker test database.
-func GetMysqlConn(tb testing.TB, dsn string, opt ...Option) *sql.DB {
+func GetMySQLConn(tb testing.TB, dsn string, opt ...Option) *sql.DB {
 	tb.Helper()
 
 	url, err := parseURL(dsn)

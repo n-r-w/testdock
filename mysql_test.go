@@ -10,8 +10,8 @@ import (
 func Test_MySQLDB(t *testing.T) {
 	t.Parallel()
 
-	db := GetMysqlConn(t,
-		DefaultMysqlDSN,
+	db := GetMySQLConn(t,
+		DefaultMySQLDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectMySQL, "mysql")),
 	)
 
