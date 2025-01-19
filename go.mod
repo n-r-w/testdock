@@ -1,4 +1,4 @@
-module github.com/n-r-w/testdock
+module github.com/n-r-w/testdock/v2
 
 go 1.22.0
 

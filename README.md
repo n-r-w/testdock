@@ -1,8 +1,8 @@
-[![Go Reference](https://pkg.go.dev/badge/github.com/n-r-w/testdock.svg)](https://pkg.go.dev/github.com/n-r-w/testdock)
-[![Go Coverage](https://github.com/n-r-w/testdock/wiki/coverage.svg)](https://raw.githack.com/wiki/n-r-w/testdock/coverage.html)
-![CI Status](https://github.com/n-r-w/testdock/actions/workflows/go.yml/badge.svg)
+[![Go Reference](https://pkg.go.dev/badge/github.com/n-r-w/testdock/v2.svg)](https://pkg.go.dev/github.com/n-r-w/testdock/v2)
+[![Go Coverage](https://github.com/n-r-w/testdock/v2/wiki/coverage.svg)](https://raw.githack.com/wiki/n-r-w/testdock/coverage.html)
+![CI Status](https://github.com/n-r-w/testdock/v2/actions/workflows/go.yml/badge.svg)
 [![Stability](http://badges.github.io/stability-badges/dist/stable.svg)](http://github.com/badges/stability-badges)
-[![Go Report](https://goreportcard.com/badge/github.com/n-r-w/testdock?v=6b996d51d6235dbae980d0120d11be6ffd65851f)](https://goreportcard.com/badge/github.com/n-r-w/testdock)
+[![Go Report](https://goreportcard.com/badge/github.com/n-r-w/testdock/v2?v=6b996d51d6235dbae980d0120d11be6ffd65851f)](https://goreportcard.com/badge/github.com/n-r-w/testdock/v2)
 
 # TestDock
 
@@ -35,7 +35,7 @@ TestDock is a Go library that simplifies database testing by providing an easy w
 ## Installation
 
 ```bash
-go get github.com/n-r-w/testdock@latest
+go get github.com/n-r-w/testdock/v2@latest
 ```
 
 ## Core Functions
@@ -83,7 +83,7 @@ Thus, in this mode, the `dsn` parameter is used as a fallback if the environment
 ```go
 import (
     "testing"
-    "github.com/n-r-w/testdock"
+    "github.com/n-r-w/testdock/v2"
 )
 
 func TestDatabase(t *testing.T) {          
@@ -112,7 +112,7 @@ func TestDatabase(t *testing.T) {
 ```go
 import (
     "testing"
-    "github.com/n-r-w/testdock"
+    "github.com/n-r-w/testdock/v2"
 )
 
 func TestMongoDB(t *testing.T) {
