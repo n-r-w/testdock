@@ -7,13 +7,13 @@ run:
   skip-files:
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
 
 linters-settings:
   govet:
-    check-shadowing: true
   dupl:
     threshold: 100
   goconst:
@@ -52,16 +52,16 @@ linters:
     - gosec
     - govet
     - ineffassign
-    - megacheck # (staticcheck + gosimple + unused in one linter)
+    - gosimple # part of former megacheck
+    - staticcheck # part of former megacheck
+    - unused # part of former megacheck
     - revive
     - typecheck
-    - unused # will be used insted of varcheck + deadcode + structcheck. More info https://github.com/golangci/golangci-lint/issues/1841
     - gocritic
     - gocognit
-    - gomnd
+    - mnd # renamed from gomnd
     - prealloc
     - unparam
-    - staticcheck
     - exhaustive
 
 issues:

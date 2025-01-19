@@ -1,4 +1,4 @@
-package pglive
+package testdock
 
 import (
 	"context"
@@ -8,22 +8,25 @@ import (
 	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/mongodb"  // require for mongodb
 	_ "github.com/golang-migrate/migrate/v4/database/postgres" // require for gomigrate
 	_ "github.com/golang-migrate/migrate/v4/source/file"       // require for gomigrate
 	"github.com/pressly/goose/v3"
 )
 
-// MigratorFactory creates a new migrator.
-type MigratorFactory func(dsn string, migrationsDir string, logger Logger) (Migrator, error)
+// MigrateFactory creates a new migrator.
+type MigrateFactory func(dsn string, migrationsDir string, logger Logger) (Migrator, error)
 
 // Migrator interface for applying migrations.
 type Migrator interface {
 	Up(ctx context.Context) error
 }
 
-// GooseMigratorFactory creates a new migrator for https://github.com/pressly/goose.
-func GooseMigratorFactory(dsn, migrationsDir string, logger Logger) (Migrator, error) {
-	return newGooseMigrator(dsn, migrationsDir, logger)
+// GooseMigrateFactory creates a new migrator for https://github.com/pressly/goose.
+func GooseMigrateFactory(dialect goose.Dialect, driver string) MigrateFactory {
+	return func(dsn, migrationsDir string, logger Logger) (Migrator, error) {
+		return newGooseMigrator(dialect, driver, dsn, migrationsDir, logger)
+	}
 }
 
 // gooseMigrator is a migrator for goose.
@@ -32,14 +35,14 @@ type gooseMigrator struct {
 }
 
 // newGooseMigrator creates a new migrator for goose.
-func newGooseMigrator(dsn, migrationsDir string, logger Logger) (*gooseMigrator, error) {
-	conn, err := sql.Open("pgx", dsn)
+func newGooseMigrator(dialect goose.Dialect, driver, dsn, migrationsDir string, logger Logger) (*gooseMigrator, error) {
+	conn, err := sql.Open(driver, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("sql open postgres url (%s): %w", dsn, err)
+		return nil, fmt.Errorf("sql open url (%s): %w", dsn, err)
 	}
 
-	p, err := goose.NewProvider(goose.DialectPostgres, conn, os.DirFS(migrationsDir),
-		goose.WithLogger(&gooseLogger{l: logger}),
+	p, err := goose.NewProvider(dialect, conn, os.DirFS(migrationsDir),
+		goose.WithLogger(NewGooseLogger(logger)),
 		goose.WithVerbose(true),
 	)
 	if err != nil {
@@ -84,7 +87,7 @@ func newGolangMigrateMigrator(dsn, migrationsDir string, logger Logger) (*golang
 		return nil, fmt.Errorf("new migrate: %w", err)
 	}
 
-	m.Log = &golangMigrateLogger{l: logger}
+	m.Log = NewGolangMigrateLogger(logger)
 
 	return &golangMigrateMigrator{m: m}, nil
 }

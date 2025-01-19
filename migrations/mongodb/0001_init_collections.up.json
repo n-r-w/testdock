@@ -1,0 +1,11 @@
+[
+    {
+        "insert": "test_collection",
+        "documents": [
+            {
+                "_id": "test1",
+                "name": "test1"
+            }
+        ]
+    }
+]

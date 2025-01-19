@@ -1,171 +1,197 @@
-[![Go Reference](https://pkg.go.dev/badge/github.com/n-r-w/pglive.svg)](https://pkg.go.dev/github.com/n-r-w/pglive)
-[![Go Coverage](https://github.com/n-r-w/pglive/wiki/coverage.svg)](https://raw.githack.com/wiki/n-r-w/pglive/coverage.html)
-![CI Status](https://github.com/n-r-w/pglive/actions/workflows/go.yml/badge.svg)
+[![Go Reference](https://pkg.go.dev/badge/github.com/n-r-w/testdock.svg)](https://pkg.go.dev/github.com/n-r-w/testdock)
+[![Go Coverage](https://github.com/n-r-w/testdock/wiki/coverage.svg)](https://raw.githack.com/wiki/n-r-w/testdock/coverage.html)
+![CI Status](https://github.com/n-r-w/testdock/actions/workflows/go.yml/badge.svg)
 [![Stability](http://badges.github.io/stability-badges/dist/stable.svg)](http://github.com/badges/stability-badges)
-[![Go Report](https://goreportcard.com/badge/github.com/n-r-w/pglive?v=6b996d51d6235dbae980d0120d11be6ffd65851f)](https://goreportcard.com/badge/github.com/n-r-w/pglive)
+[![Go Report](https://goreportcard.com/badge/github.com/n-r-w/testdock?v=6b996d51d6235dbae980d0120d11be6ffd65851f)](https://goreportcard.com/badge/github.com/n-r-w/testdock)
 
-# pglive
+# TestDock
 
-PostgreSQL live database unit testing
+TestDock is a Go library that simplifies database testing by providing an easy way to create and manage test databases in realistic scenarios, instead of using mocks. It supports running tests against both Docker containers and external databases, with built-in support for MongoDB and various SQL databases.
+
+## Features
+
+- **Multiple Database Support**  
+  - MongoDB: `GetMongoDatabase` function
+  - PostgreSQL (with both `pgx` and `pq` drivers): `GetPgxPool` and `GetPqConn` functions
+  - MySQL: `GetMysqlConn` function
+  - Any other SQL database supported by `database/sql`: `GetSQLConn` function
+
+- **Flexible Test Environment**
+  - Docker container support for isolated testing
+  - External database support for CI/CD environments
+  - Auto-mode that switches based on environment variables
+
+- **Database Migration Support**
+  - Integration with [goose](https://github.com/pressly/goose)
+  - Integration with [golang-migrate](https://github.com/golang-migrate/migrate)
+  - User provided migration tool
+  - Automatic migration application during test setup
+
+- **Robust Connection Handling**
+  - Automatic retry mechanisms
+  - Automatic selection of a free host port when deploying containers
+  - Graceful cleanup after tests
 
 ## Installation
 
 ```bash
-go get github.com/n-r-w/pglive@latest
+go get github.com/n-r-w/testdock@latest
 ```
 
-## Introduction
+## Core Functions
 
-pglive is a Go package designed to simplify PostgreSQL database testing by providing:
+- `GetPgxPool`: PostgreSQL connection pool (pgx driver)
+- `GetPqConn`: PostgreSQL connection (libpq driver)
+- `GetMysqlConn`: MySQL connection
+- `GetSQLConn`: Generic SQL database connection
+- `GetMongoDatabase`: MongoDB database
 
-- Isolated test databases for parallel test execution
-- Automatic database creation and cleanup
-- Flexible configuration options for both Docker and external database setups
-- Support for multiple migration tools (gomigrate, goose) with custom migration support
-- Comprehensive connection pooling configuration
-- Detailed logging capabilities
+## Usage
 
-## Features
+### Connection string format
 
-- **Parallel Test Support**: Each test runs in its own isolated database instance
-- **Automatic Cleanup**: Databases are automatically created and removed
-- **Migration Support**:
-  - Built-in support for gomigrate and goose
-  - Custom migration tool integration via WithMigratorFactory
-- **Connection Management**:
-  - Configurable connection pooling
-  - Connection health checks
-  - Timeout and lifetime settings
-- **Logging**:
-  - Built-in structured logging
-  - Custom logger support
-- **Configuration Options**:
-  - Docker and external database support
-  - Environment variable and direct parameter configuration
-  - GitLab CI integration
+The connection string format is driver-specific. For example:
 
-There are two operating modes: using Docker and using an external database.
+- For PostgreSQL: `postgres://user:password@localhost:5432/database?sslmode=disable`
+- For MySQL: `root:password@tcp(localhost:3306)/database?parseTime=true`
+- For MongoDB: `mongodb://user:password@localhost:27017/database`
 
-### Using Docker
+### Connection string purpose
 
-In this case, the default mapping for PostgreSQL on the host is to port 5433 to avoid conflicts with local PostgreSQL.
-For Docker Desktop on Linux or macOS, you should define `DOCKER_SOCKET_ENDPOINT` environment variable with:
+Depending on the chosen mode (`WithMode`), the connection string is used differently:
 
-- Linux: `unix:///home/<user>/.docker/desktop/docker.sock`
-- macOS: `unix:///Users/<USER>/.docker/run/docker.sock`
+#### `RunModeExternal`
 
-### Using an external database
+- The connection string is used directly to connect to the database
 
-This mode is activated in the following cases:
+#### `RunModeDocker`
 
-- at least one parameter in Option are used: WithHost, WithPort, WithDatabase, WithUser, WithPassword
-- at least one environment variable is set: POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD.
+- The connection string is used to generate the Docker container configuration
+- The port value is used 1) as the port inside the container, 2) as the external access port to the database
+- If this port is already taken on the host, then TestDock tries to find a free port by incrementing its value by 1 until a free port is found
 
-Can be activated in GitLab CI with the following settings in .gitlab-ci.yml. Setting POSTGRES_DB in GitLab environment variables doesn't make sense because the default database won't be used. Example of .gitlab-ci.yml file with PostgreSQL service and environment variables for go tests:
+#### `RunModeAuto` (used by default)
 
-```yaml
-go tests:
-  services:
-    - name: postgres:16.2 # PostgreSQL image name from <https://hub.docker.com/_/postgres>
-      alias: test-postgres
-      command: ["-c", "max_connections=200"] # Increasing the number of connections (if you have a lot of parallel tests)
-  variables: # Environment variables
-    POSTGRES_USER: postgres # Username
-    POSTGRES_PASSWORD: secret # Password
-    POSTGRES_HOST: test-postgres # Hostname
-    POSTGRES_HOST_AUTH_METHOD: trust
-    GOFLAGS: # Flags for go test if needed (-tags=xxxx)
-```
+- If the environment variable `TESTDOCK_DSN_<DRIVER_NAME>` is not set, then TestDock chooses
+the `RunModeDocker` mode and uses the input string as the container configuration
+- If the environment variable `TESTDOCK_DSN_<DRIVER_NAME>` is set, then TestDock chooses
+the `RunModeExternal` mode and uses the string from the environment variable to connect to the external database. In this case, the `dsn` parameter of the constructor function is ignored.
+Thus, in this mode, the `dsn` parameter is used as a fallback if the environment variable is not set.
 
-Known limitations in external database mode:
-
-- The test database will not be deleted if the test execution is stopped on a breakpoint and not continued.
-
-### Parameter filling priority
-
-- If specific value parameters are set (Host, Port, Database, User, Password), the values from these parameters are used.
-- If environment variables are set and specific value parameters are not set, the values from the environment variables are used.
-- If neither environment variables nor specific value parameters are set, default values are used.
-
-Default values:
-
-```plaintext
-PostrgreSQL image: postgres:latest
-PostrgreSQL Host: 127.0.0.1
-PostrgreSQL port: 5432
-PostrgreSQL mapping port: 5433 (Docker mode)
-User: postgres
-Password: secret
-```
-
-## Usage example
-
-### Basic Usage
+### PostgreSQL Example (using pgx)
 
 ```go
 import (
-  "testing"
-  "context"
-
-  "github.com/jackc/pgx/v5/pgxpool"
-  "github.com/n-r-w/pglive"
+    "testing"
+    "github.com/n-r-w/testdock"
 )
 
-func Test_Example(t *testing.T) {
-    t.Parallel()
-    
-    // Create test database, run migrations and return a database connection
-    db := pglive.GetPool(t, "./migrations")
-    defer db.Close()
+func TestDatabase(t *testing.T) {          
+    // Get a connection pool to a test database.
 
-    // Example query
-    rows, err := db.Query(context.Background(), "SELECT name FROM test_table")
-    if err != nil {
-        t.Fatalf("error: %s", err)
-    }
-    defer rows.Close()
+    /* 
+    If the environment variable TESTDOCK_DSN_POSTGRES is set, then the input 
+    connection string is ignored and the value from the environment variable
+    is used. If the environment variable TESTDOCK_DSN_POSTGRES is not set, 
+    then the input connection string is used to generate the Docker container 
+    configuration.
+    */
+
+    pool := testdock.GetPgxPool(t, 
+        "postgres://postgres:secret@localhost:5432/postgres?sslmode=disable",
+        testdock.WithMigrations("migrations", GooseMigrateFactory(goose.DialectPostgres, "pgx")),        
+    )
     
-    for rows.Next() {
-        var name string
-        if err := rows.Scan(&name); err != nil {
-            t.Fatalf("error: %s", err)
-        }
-        if name != "test" {
-            t.Fatalf("expected 'test', got '%s'", name)
-        }
-    }
+    // Use the pool for your tests
+    // The database will be automatically cleaned up after the test
 }
 ```
 
-### Using Specific Migration Tool
+### MongoDB Example
 
 ```go
 import (
-  "testing"
-  "time"
-
-  "github.com/jackc/pgx/v5/pgxpool"
-  "github.com/n-r-w/pglive"
+    "testing"
+    "github.com/n-r-w/testdock"
 )
 
-func Test_WithGooseMigrations(t *testing.T) {
-    t.Parallel()
+func TestMongoDB(t *testing.T) {
+    dsn := "mongodb://user:password@localhost:27017"
     
-    db := pglive.GetPool(t, "./migrations/goose", 
-        pglive.WithMigratorFactory(pglive.GooseMigratorFactory),        
+    // Get a connection to a test database
+    db := testdock.GetMongoDatabase(t, dsn,
+        testdock.WithMode(testdock.RunModeDocker),
+        testdock.WithMigrations("migrations", GolangMigrateFactory),
     )
-    defer db.Close()
     
-    // Test code...
+    // Use the database for your tests
+    // The database will be automatically cleaned up after the test
 }
+```
 
-func Test_WithGoMigrateMigrations(t *testing.T) {
-    t.Parallel()
-    
-    db := pglive.GetPool(t, "./migrations/gomigrate", 
-        pglive.WithMigratorFactory(pglive.GolangMigrateFactory),        
-    )
-    defer db.Close()
-    
-    // Test code...
-}
+## Configuration
+
+### Environment Variables, used by `RunModeAuto`
+
+- `TESTDOCK_DSN_PGX`, `TESTDOCK_DSN_POSTGRES` - PostgreSQL-specific connection strings
+- `TESTDOCK_DSN_MYSQL` - MySQL-specific connection string
+- `TESTDOCK_DSN_MONGODB` - MongoDB-specific connection string
+- `TESTDOCK_DSN_<DRIVER_NAME>` - Custom connection string for a specific driver
+
+### Retry and Connection Handling
+
+- `WithRetryTimeout(duration)`: Configure connection retry timeout (default 30s)
+
+### Docker Configuration
+
+- `WithDockerSocketEndpoint(endpoint)`: Custom Docker daemon socket
+- `WithDockerPort(port)`: Override container port mapping
+- `WithUnsetProxyEnv(bool)`: Unset proxy environment variables
+
+### Database Options
+
+- `WithConnectDatabase(name)`: Override connection database
+- `WithPrepareCleanUp(func)`: Custom cleanup handlers. The default is empty, but `GetPgxPool` and `GetPqConn` functions use it to automatically apply cleanup handlers to disconnect all users from the database before cleaning up.
+- `WithLogger(logger)`: Custom logging implementation
+
+## Migrations
+
+TestDock supports two popular migration tools:
+
+### Goose Migrations (SQL databases only)
+
+<https://github.com/pressly/goose>
+
+```go
+ db := GetPqConn(t,
+    "postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
+    WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "postgres")),
+    WithDockerImage("17.2"),
+ )
+```
+
+### Golang-Migrate Migrations (SQL databases and MongoDB)
+
+<https://github.com/golang-migrate/migrate>
+
+```go
+db := GetMongoDatabase(t,
+    "mongodb://testuser:secret@127.0.0.1:27017/testdb?authSource=admin",
+    WithDockerRepository("mongo"),
+    WithDockerImage("6.0.20"),
+    WithMigrations("migrations/mongodb", GolangMigrateFactory),
+ )
+```
+
+### Custom Migrations
+
+You can also use a custom migration tool implementing the `testdock.MigrateFactory` interface.
+
+## Requirements
+
+- Go 1.22 or higher
+- Docker (when using `RunModeDocker` or `RunModeAuto`)
+
+## License
+
+MIT License - see LICENSE for details

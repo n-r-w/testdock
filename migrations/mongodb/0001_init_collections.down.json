@@ -1,0 +1,13 @@
+[
+    {
+        "delete": "test_collection",
+        "deletes": [
+            {
+                "q": {
+                    "_id": "test1"
+                },
+                "limit": 1
+            }
+        ]
+    }
+]

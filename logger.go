@@ -1,4 +1,4 @@
-package pglive
+package testdock
 
 import "testing"
 
@@ -8,38 +8,62 @@ type Logger interface {
 	Logf(format string, args ...any)
 }
 
-type defaultLogger struct {
+// DefaultLogger is the default logger.
+type DefaultLogger struct {
 	t testing.TB
 }
 
-func (d defaultLogger) Fatalf(format string, args ...any) {
+// NewDefaultLogger creates a new default logger.
+func NewDefaultLogger(t testing.TB) Logger {
+	return &DefaultLogger{t: t}
+}
+
+// Fatalf logs a fatal error.
+func (d DefaultLogger) Fatalf(format string, args ...any) {
 	d.t.Fatalf(format, args...)
 }
 
-func (d defaultLogger) Logf(format string, args ...any) {
+// Logf logs a message.
+func (d DefaultLogger) Logf(format string, args ...any) {
 	d.t.Logf(format, args...)
 }
 
-type gooseLogger struct {
+// GooseLogger is a logger for goose.
+type GooseLogger struct {
 	l Logger
 }
 
-func (l gooseLogger) Fatalf(format string, v ...any) {
+// NewGooseLogger creates a new goose logger.
+func NewGooseLogger(l Logger) *GooseLogger {
+	return &GooseLogger{l: l}
+}
+
+// Fatalf logs a fatal error.
+func (l GooseLogger) Fatalf(format string, v ...any) {
 	l.l.Fatalf(format, v...)
 }
 
-func (l gooseLogger) Printf(format string, v ...any) {
+// Printf logs a message.
+func (l GooseLogger) Printf(format string, v ...any) {
 	l.l.Logf(format, v...)
 }
 
-type golangMigrateLogger struct {
+// GolangMigrateLogger is a logger for golang-migrate.
+type GolangMigrateLogger struct {
 	l Logger
 }
 
-func (g *golangMigrateLogger) Printf(format string, v ...interface{}) {
+// NewGolangMigrateLogger creates a new golang-migrate logger.
+func NewGolangMigrateLogger(l Logger) *GolangMigrateLogger {
+	return &GolangMigrateLogger{l: l}
+}
+
+// Printf logs a message.
+func (g *GolangMigrateLogger) Printf(format string, v ...interface{}) {
 	g.l.Logf(format, v...)
 }
 
-func (g *golangMigrateLogger) Verbose() bool {
+// Verbose returns true.
+func (g *GolangMigrateLogger) Verbose() bool {
 	return true
 }
