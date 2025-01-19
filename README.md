@@ -14,7 +14,7 @@ TestDock is a Go library that simplifies database testing by providing an easy w
   - MongoDB: `GetMongoDatabase` function
   - PostgreSQL (with both `pgx` and `pq` drivers): `GetPgxPool` and `GetPqConn` functions
   - MySQL: `GetMysqlConn` function
-  - Any other SQL database supported by `database/sql`: `GetSQLConn` function
+  - Any other SQL database supported by `database/sql` <https://go.dev/wiki/SQLDrivers>: `GetSQLConn` function
 
 - **Flexible Test Environment**
   - Docker container support for isolated testing
@@ -98,7 +98,7 @@ func TestDatabase(t *testing.T) {
     */
 
     pool := testdock.GetPgxPool(t, 
-        "postgres://postgres:secret@localhost:5432/postgres?sslmode=disable",
+        testdock.DefaultPostgresDSN,
         testdock.WithMigrations("migrations", GooseMigrateFactory(goose.DialectPostgres, "pgx")),        
     )
     
@@ -115,11 +115,9 @@ import (
     "github.com/n-r-w/testdock/v2"
 )
 
-func TestMongoDB(t *testing.T) {
-    dsn := "mongodb://user:password@localhost:27017"
-    
+func TestMongoDB(t *testing.T) {        
     // Get a connection to a test database
-    db := testdock.GetMongoDatabase(t, dsn,
+    db := testdock.GetMongoDatabase(t, testdock.DefaultMongoDSN,
         testdock.WithMode(testdock.RunModeDocker),
         testdock.WithMigrations("migrations", GolangMigrateFactory),
     )
@@ -154,6 +152,12 @@ func TestMongoDB(t *testing.T) {
 - `WithPrepareCleanUp(func)`: Custom cleanup handlers. The default is empty, but `GetPgxPool` and `GetPqConn` functions use it to automatically apply cleanup handlers to disconnect all users from the database before cleaning up.
 - `WithLogger(logger)`: Custom logging implementation
 
+### Default connection strings
+
+- `DefaultPostgresDSN`: Default PostgreSQL connection string
+- `DefaultMysqlDSN`: Default MySQL connection string
+- `DefaultMongoDSN`: Default MongoDB connection string
+
 ## Migrations
 
 TestDock supports two popular migration tools:
@@ -165,8 +169,8 @@ TestDock supports two popular migration tools:
 ```go
  db := GetPqConn(t,
     "postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
-    WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "postgres")),
-    WithDockerImage("17.2"),
+    testdock.WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "postgres")),
+    testdock.WithDockerImage("17.2"),
  )
 ```
 
@@ -176,10 +180,10 @@ TestDock supports two popular migration tools:
 
 ```go
 db := GetMongoDatabase(t,
-    "mongodb://testuser:secret@127.0.0.1:27017/testdb?authSource=admin",
+    testdock.DefaultMongoDSN,
     WithDockerRepository("mongo"),
     WithDockerImage("6.0.20"),
-    WithMigrations("migrations/mongodb", GolangMigrateFactory),
+    WithMigrations("migrations/mongodb", testdock.GolangMigrateFactory),
  )
 ```
 

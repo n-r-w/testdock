@@ -10,6 +10,15 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	// DefaultMongoDSN - default mongodb connection string.
+	DefaultMongoDSN = "mongodb://testuser:secret@127.0.0.1:27017/testdb?authSource=admin"
+	// DefaultMysqlDSN - default mysql connection string.
+	DefaultMysqlDSN = "root:secret@tcp(127.0.0.1:3306)/test_db"
+	// DefaultPostgresDSN - default postgres connection string.
+	DefaultPostgresDSN = "postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable"
+)
+
 // RunMode defines the run mode of the test database.
 type RunMode int
 

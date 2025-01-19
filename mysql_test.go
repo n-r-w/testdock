@@ -11,7 +11,7 @@ func Test_MySQLDB(t *testing.T) {
 	t.Parallel()
 
 	db := GetMysqlConn(t,
-		"root:secret@tcp(127.0.0.1:3306)/test_db",
+		DefaultMysqlDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectMySQL, "mysql")),
 	)
 

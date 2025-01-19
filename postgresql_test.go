@@ -14,7 +14,7 @@ func Test_PgxGooseDB(t *testing.T) {
 	t.Parallel()
 
 	db := GetPgxPool(t,
-		"postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
+		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "pgx")),
 		WithDockerImage(testPostgresImage),
 	)
@@ -26,7 +26,7 @@ func Test_PgxGomigrateDB(t *testing.T) {
 	t.Parallel()
 
 	db := GetPgxPool(t,
-		"postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
+		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/gomigrate", GolangMigrateFactory),
 		WithDockerImage(testPostgresImage),
 	)
@@ -38,7 +38,7 @@ func Test_LibPGDB(t *testing.T) {
 	t.Parallel()
 
 	db := GetPqConn(t,
-		"postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
+		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "postgres")),
 		WithDockerImage(testPostgresImage),
 	)

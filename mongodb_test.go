@@ -15,7 +15,7 @@ func TestMongoDB(t *testing.T) {
 
 	// Create test database and return a MongoDB client
 	db := GetMongoDatabase(t,
-		"mongodb://testuser:secret@127.0.0.1:27017/testdb?authSource=admin",
+		DefaultMongoDSN,
 		WithDockerRepository("mongo"),
 		WithDockerImage("6.0.20"),
 		WithMigrations("migrations/mongodb", GolangMigrateFactory),
