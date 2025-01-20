@@ -99,7 +99,7 @@ func TestDatabase(t *testing.T) {
 
     pool := testdock.GetPgxPool(t, 
         testdock.DefaultPostgresDSN,
-        testdock.WithMigrations("migrations", GooseMigrateFactory(goose.DialectPostgres, "pgx")),        
+        testdock.WithMigrations("migrations", testdock.GooseMigrateFactoryPGX),        
     )
     
     // Use the pool for your tests
@@ -169,7 +169,7 @@ TestDock supports two popular migration tools:
 ```go
  db := GetPqConn(t,
     "postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
-    testdock.WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "postgres")),
+    testdock.WithMigrations("migrations/pg/goose", testdock.GooseMigrateFactoryPQ),
     testdock.WithDockerImage("17.2"),
  )
 ```

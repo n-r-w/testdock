@@ -3,8 +3,6 @@ package testdock
 import (
 	"database/sql"
 	"testing"
-
-	"github.com/pressly/goose/v3"
 )
 
 func Test_MySQLDB(t *testing.T) {
@@ -12,7 +10,7 @@ func Test_MySQLDB(t *testing.T) {
 
 	db := GetMySQLConn(t,
 		DefaultMySQLDSN,
-		WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectMySQL, "mysql")),
+		WithMigrations("migrations/pg/goose", GooseMigrateFactoryMySQL),
 	)
 
 	testSQLHelper(t, db)

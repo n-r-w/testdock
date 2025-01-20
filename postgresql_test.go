@@ -6,7 +6,6 @@ import (
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pressly/goose/v3"
 )
 
 const testPostgresImage = "17.2"
@@ -16,7 +15,7 @@ func Test_PgxGooseDB(t *testing.T) {
 
 	db := GetPgxPool(t,
 		DefaultPostgresDSN,
-		WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "pgx")),
+		WithMigrations("migrations/pg/goose", GooseMigrateFactoryPGX),
 		WithDockerImage(testPostgresImage),
 	)
 
@@ -40,7 +39,7 @@ func Test_LibPGDB(t *testing.T) {
 
 	db := GetPqConn(t,
 		DefaultPostgresDSN,
-		WithMigrations("migrations/pg/goose", GooseMigrateFactory(goose.DialectPostgres, "postgres")),
+		WithMigrations("migrations/pg/goose", GooseMigrateFactoryPQ),
 		WithDockerImage(testPostgresImage),
 	)
 
