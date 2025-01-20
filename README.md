@@ -119,7 +119,7 @@ func TestMongoDB(t *testing.T) {
     // Get a connection to a test database
     db := testdock.GetMongoDatabase(t, testdock.DefaultMongoDSN,
         testdock.WithMode(testdock.RunModeDocker),
-        testdock.WithMigrations("migrations", GolangMigrateFactory),
+        testdock.WithMigrations("migrations", testdock.GolangMigrateFactory),
     )
     
     // Use the database for your tests
