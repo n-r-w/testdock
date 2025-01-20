@@ -1,11 +1,10 @@
 module github.com/n-r-w/testdock/v2
 
-go 1.22.0
-
-toolchain go1.22.6
+go 1.22.6
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/georgysavva/scany/v2 v2.1.3
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/google/uuid v1.6.0

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
 )
@@ -49,17 +50,18 @@ func Test_LibPGDB(t *testing.T) {
 func testPgxHelper(t *testing.T, db *pgxpool.Pool) {
 	t.Helper()
 
-	rows, err := db.Query(context.Background(), "SELECT name FROM test_table")
-	if err != nil {
-		t.Fatalf("error: %s", err)
+	var rows []struct {
+		Name string `db:"name"`
 	}
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			t.Fatalf("error: %s", err)
-		}
-		if name != "test" { //nolint:goconst // ok
-			t.Fatalf("expected 'test', got '%s'", name)
-		}
+	if err := pgxscan.Select(context.Background(), db, &rows, "SELECT name FROM test_table"); err != nil {
+		t.Fatalf("error querying test_table: %s", err)
+	}
+
+	if len(rows) == 0 {
+		t.Fatal("no rows returned from test_table")
+	}
+
+	if rows[0].Name != "test" { //nolint:goconst // ok
+		t.Fatalf("expected 'test', got '%s'", rows[0].Name)
 	}
 }
