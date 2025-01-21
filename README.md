@@ -1,8 +1,6 @@
-[![Go Reference](https://pkg.go.dev/badge/github.com/n-r-w/testdock.svg)](https://pkg.go.dev/github.com/n-r-w/testdock)
+[![Go Reference](https://pkg.go.dev/badge/github.com/n-r-w/testdock.svg)](https://pkg.go.dev/github.com/n-r-w/testdock/v2)
 [![Go Coverage](https://github.com/n-r-w/testdock/wiki/coverage.svg)](https://raw.githack.com/wiki/n-r-w/testdock/coverage.html)
 ![CI Status](https://github.com/n-r-w/testdock/actions/workflows/go.yml/badge.svg)
-[![Stability](http://badges.github.io/stability-badges/dist/stable.svg)](http://github.com/badges/stability-badges)
-[![Go Report](https://goreportcard.com/badge/github.com/n-r-w/testdock?v=6b996d51d6235dbae980d0120d11be6ffd65851f)](https://goreportcard.com/badge/github.com/n-r-w/testdock)
 
 # TestDock
 
