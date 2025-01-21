@@ -3,6 +3,7 @@ package testdock
 import (
 	"database/sql"
 	"testing"
+	"time"
 )
 
 func Test_MySQLDB(t *testing.T) {
@@ -11,6 +12,8 @@ func Test_MySQLDB(t *testing.T) {
 	db := GetMySQLConn(t,
 		DefaultMySQLDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactoryMySQL),
+		WithRetryTimeout(time.Second*5),
+		WithTotalRetryDuration(time.Second*60), //nolint:mnd // for Docker 30s not enough
 	)
 
 	testSQLHelper(t, db)

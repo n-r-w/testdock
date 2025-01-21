@@ -81,10 +81,18 @@ func WithDockerPort(dockerPort int) Option {
 }
 
 // WithRetryTimeout sets the timeout for connecting to the database.
-// The default is 30 seconds.
+// The default is 3 second. Must be less than totalRetryDuration.
 func WithRetryTimeout(retryTimeout time.Duration) Option {
 	return func(o *testDB) {
 		o.retryTimeout = retryTimeout
+	}
+}
+
+// WithTotalRetryDuration sets the total retry duration.
+// The default is 30 seconds. Must be greater than retryTimeout.
+func WithTotalRetryDuration(totalRetryDuration time.Duration) Option {
+	return func(o *testDB) {
+		o.totalRetryDuration = totalRetryDuration
 	}
 }
 
@@ -142,6 +150,10 @@ func WithConnectDatabase(connectDatabase string) Option {
 func (d *testDB) prepareOptions(driver string, options []Option) error {
 	for _, o := range options {
 		o(d)
+	}
+
+	if d.totalRetryDuration <= d.retryTimeout {
+		return errors.New("totalRetryDuration must be greater than retryTimeout")
 	}
 
 	if d.driver == "" {

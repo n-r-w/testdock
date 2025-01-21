@@ -53,7 +53,7 @@ func (d *testDB) connectMongoDB() (*mongo.Client, error) {
 		ctx    = context.Background()
 	)
 
-	err = retryConnect(d.logger, d.retryTimeout, d.url.string(true), func() error {
+	err = d.retryConnect(d.url.string(true), func() error {
 		client, err = mongo.Connect(ctx, options.Client().ApplyURI(d.url.string(false)))
 		if err != nil {
 			return fmt.Errorf("mongo connect: %w", err)

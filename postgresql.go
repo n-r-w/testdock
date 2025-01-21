@@ -55,7 +55,7 @@ func (d *testDB) connectPgxDB() (*pgxpool.Pool, error) {
 		db  *pgxpool.Pool
 		ctx = context.Background()
 	)
-	err := retryConnect(d.logger, d.retryTimeout, dbURL.string(true), func() (err error) {
+	err := d.retryConnect(dbURL.string(true), func() (err error) {
 		db, err = pgxpool.New(ctx, dbURL.string(false))
 		if err != nil {
 			return err
