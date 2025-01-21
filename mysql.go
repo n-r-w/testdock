@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
-	"time"
 
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 )
@@ -24,7 +23,6 @@ func GetMySQLConn(tb testing.TB, dsn string, opt ...Option) *sql.DB {
 	optPrepared = append(optPrepared,
 		WithDockerRepository("mysql"),
 		WithDockerImage("9.1.0"),
-		WithRetryTimeout(time.Second*60), //nolint:mnd // 30s not enough
 		WithDockerEnv([]string{
 			fmt.Sprintf("MYSQL_ROOT_PASSWORD=%s", url.Password),
 			fmt.Sprintf("MYSQL_DATABASE=%s", url.Database),

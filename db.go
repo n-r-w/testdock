@@ -8,11 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v5"
 )
 
-// DefaultRetryTimeout is the default retry timeout.
-const DefaultRetryTimeout = time.Second * 30
+const (
+	// DefaultRetryTimeout is the default retry timeout.
+	DefaultRetryTimeout = time.Second * 3
+	// DefaultTotalRetryDuration is the default total retry duration.
+	DefaultTotalRetryDuration = time.Second * 30
+)
 
 // PrepareCleanUp - function for prepare to delete temporary test database.
 // For example, disconnect users.
@@ -33,6 +37,7 @@ type testDB struct {
 	mode                    RunMode          // run mode (docker or external)
 	dsn                     string           // database connection string
 	retryTimeout            time.Duration    // retry timeout for connecting to the database
+	totalRetryDuration      time.Duration    // total retry duration
 	migrationsDir           string           // migrations directory
 	unsetProxyEnv           bool             // unset HTTP_PROXY, HTTPS_PROXY etc. environment variables
 	MigrateFactory          MigrateFactory   // unified way to create a migrations
@@ -58,12 +63,13 @@ func newTDB(tb testing.TB, driver, dsn string, opt []Option) *testDB {
 
 	var (
 		db = &testDB{
-			t:            tb,
-			logger:       NewDefaultLogger(tb),
-			driver:       driver,
-			dsn:          dsn,
-			mode:         RunModeAuto,
-			retryTimeout: DefaultRetryTimeout,
+			t:                  tb,
+			logger:             NewDefaultLogger(tb),
+			driver:             driver,
+			dsn:                dsn,
+			mode:               RunModeAuto,
+			retryTimeout:       DefaultRetryTimeout,
+			totalRetryDuration: DefaultTotalRetryDuration,
 		}
 		errResult error
 	)
@@ -182,25 +188,24 @@ func (d *testDB) createTestDatabase() error {
 }
 
 // retryConnect connects to the database with retries.
-func retryConnect(logger Logger, maxTime time.Duration, info string, op func() error) error {
-	const retryTimeout = time.Second * 5
-
-	if maxTime == 0 {
-		maxTime = time.Minute
-	}
-	bo := backoff.NewExponentialBackOff()
-	bo.MaxInterval = retryTimeout
-	bo.MaxElapsedTime = maxTime
+func (d *testDB) retryConnect(info string, op func() error) error {
 	var attempt int
-	if err := backoff.RetryNotify(op, bo,
-		func(err error, _ time.Duration) {
-			logger.Logf("[%s] retrying attempt %d: %v", info, attempt, err)
+	operation := func() (struct{}, error) {
+		if err := op(); err != nil {
+			d.logger.Logf("[%s] retrying attempt %d: %v", info, attempt, err)
 			attempt++
-		}); err != nil {
-		if bo.NextBackOff() == backoff.Stop {
-			return fmt.Errorf("reached retry deadline %w", err)
+			return struct{}{}, err
 		}
-		return err
+		return struct{}{}, nil
+	}
+
+	_, err := backoff.Retry(
+		context.Background(), operation,
+		backoff.WithBackOff(backoff.NewConstantBackOff(d.retryTimeout)),
+		backoff.WithMaxElapsedTime(d.totalRetryDuration),
+	)
+	if err != nil {
+		return fmt.Errorf("retry failed after %d attempts: %w", attempt, err)
 	}
 
 	return nil

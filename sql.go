@@ -37,7 +37,7 @@ func (d *testDB) connectSQLDB(testDatabase bool) (*sql.DB, error) {
 	d.logger.Logf("[%s] connecting to test database", dbURL.string(true))
 
 	var db *sql.DB
-	err := retryConnect(d.logger, d.retryTimeout, dbURL.string(true), func() (err error) {
+	err := d.retryConnect(dbURL.string(true), func() (err error) {
 		db, err = sql.Open(d.driver, dbURL.string(false))
 		if err != nil {
 			return err

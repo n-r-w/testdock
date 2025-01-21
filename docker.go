@@ -1,6 +1,7 @@
 package testdock
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
@@ -176,8 +178,30 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 			defer globalDockerMu.Unlock()
 
 			delete(globalDockerResources, d.dsn)
-			_ = globalDockerPool.Purge(info.resource) // error is not important
-			d.logger.Logf("[%s] dockertest resources purged", logDsn)
+
+			const (
+				maxTime      = 10 * time.Second
+				retryTimeout = 1 * time.Second
+			)
+			var attempt int
+
+			operation := func() (struct{}, error) {
+				if err := globalDockerPool.Purge(info.resource); err != nil {
+					attempt++
+					d.logger.Logf("[%s] dockertest purge attempt %d failed: %v", logDsn, attempt, err)
+					return struct{}{}, err
+				}
+				return struct{}{}, nil
+			}
+
+			if _, err := backoff.Retry(
+				context.Background(), operation,
+				backoff.WithBackOff(backoff.NewConstantBackOff(retryTimeout)),
+				backoff.WithMaxElapsedTime(maxTime)); err != nil {
+				d.logger.Logf("[%s] dockertest purge failed after retries attempt %d: %v", logDsn, attempt, err)
+			} else {
+				d.logger.Logf("[%s] dockertest resources purged successfully after %d attempts", logDsn, attempt)
+			}
 		}
 	})
 

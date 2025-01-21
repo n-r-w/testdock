@@ -138,7 +138,8 @@ func TestMongoDB(t *testing.T) {
 
 ### Retry and Connection Handling
 
-- `WithRetryTimeout(duration)`: Configure connection retry timeout (default 30s)
+- `WithRetryTimeout(duration)`: Configure connection retry timeout (default 3s). Must be less than totalRetryDuration
+- `WithTotalRetryDuration(duration)`: Configure total retry duration (default 30s). Must be greater than retryTimeout
 
 ### Docker Configuration
 
