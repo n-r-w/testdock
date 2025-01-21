@@ -29,6 +29,7 @@ func Test_PgxGomigrateDB(t *testing.T) {
 		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/gomigrate", GolangMigrateFactory),
 		WithDockerImage(testPostgresImage),
+		WithMode(RunModeDocker), // force run in docker
 	)
 
 	testPgxHelper(t, db)
