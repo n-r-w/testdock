@@ -13,12 +13,14 @@ import (
 
 // Informer interface for database information.
 type Informer interface {
-	// RealDSN returns the real database connection string.
-	RealDSN() string
+	// DSN returns the real database connection string.
+	DSN() string
 	// Host returns the host of the database server.
 	Host() string
 	// Port returns the port of the database server.
 	Port() int
+	// DatabaseName returns the database name for testing.
+	DatabaseName() string
 }
 
 const (
@@ -221,8 +223,8 @@ func (d *testDB) retryConnect(info string, op func() error) error {
 	return nil
 }
 
-// RealDSN returns the real database connection string.
-func (d *testDB) RealDSN() string {
+// DSN returns the real database connection string.
+func (d *testDB) DSN() string {
 	return d.url.replaceDatabase(d.databaseName).string(false)
 }
 
@@ -234,4 +236,9 @@ func (d *testDB) Host() string {
 // Port returns the database port.
 func (d *testDB) Port() int {
 	return d.url.Port
+}
+
+// DatabaseName returns the database name for testing.
+func (d *testDB) DatabaseName() string {
+	return d.databaseName
 }
