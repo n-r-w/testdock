@@ -9,7 +9,7 @@ import (
 // GetSQLConn inits a test database, applies migrations, and returns sql connection to the database.
 // driver: https://go.dev/wiki/SQLDrivers.
 // Do not forget to import corresponding driver package.
-func GetSQLConn(tb testing.TB, driver, dsn string, opt ...Option) *sql.DB {
+func GetSQLConn(tb testing.TB, driver, dsn string, opt ...Option) (*sql.DB, Informer) {
 	tb.Helper()
 
 	tDB := newTDB(tb, driver, dsn, opt)
@@ -19,9 +19,11 @@ func GetSQLConn(tb testing.TB, driver, dsn string, opt ...Option) *sql.DB {
 		tDB.logger.Fatalf("%v", err)
 	}
 
+	
+
 	tb.Cleanup(func() { _ = db.Close() })
 
-	return db
+	return db, tDB
 }
 
 // connectSQLDB connects to the database with retries using database/sql.

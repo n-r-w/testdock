@@ -13,7 +13,7 @@ import (
 const mongoDriverName = "mongodb"
 
 // GetMongoDatabase  initializes a test MongoDB database, applies migrations, and returns a database connection.
-func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) *mongo.Database {
+func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongo.Database, Informer) {
 	tb.Helper()
 
 	url, err := parseURL(dsn)
@@ -42,7 +42,7 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) *mongo.Database 
 
 	tb.Cleanup(func() { _ = client.Disconnect(context.Background()) })
 
-	return client.Database(tDB.databaseName)
+	return client.Database(tDB.databaseName), tDB
 }
 
 // connectDB connects to MongoDB with retries
