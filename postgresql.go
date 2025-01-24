@@ -14,7 +14,7 @@ import (
 
 // GetPgxPool inits a test postgresql (pgx driver) database, applies migrations,
 // and returns pgx connection pool to the database.
-func GetPgxPool(tb testing.TB, dsn string, opt ...Option) *pgxpool.Pool {
+func GetPgxPool(tb testing.TB, dsn string, opt ...Option) (*pgxpool.Pool, Informer) {
 	tb.Helper()
 
 	tDB := newTDB(tb, "pgx", dsn, getPostgresOptions(tb, dsn, opt...))
@@ -26,12 +26,12 @@ func GetPgxPool(tb testing.TB, dsn string, opt ...Option) *pgxpool.Pool {
 
 	tb.Cleanup(func() { db.Close() })
 
-	return db
+	return db, tDB
 }
 
 // GetPqConn inits a test postgresql (pq driver) database, applies migrations,
 // and returns sql connection to the database.
-func GetPqConn(tb testing.TB, dsn string, opt ...Option) *sql.DB {
+func GetPqConn(tb testing.TB, dsn string, opt ...Option) (*sql.DB, Informer) {
 	tb.Helper()
 
 	tDB := newTDB(tb, "postgres", dsn, getPostgresOptions(tb, dsn, opt...))
@@ -43,7 +43,7 @@ func GetPqConn(tb testing.TB, dsn string, opt ...Option) *sql.DB {
 
 	tb.Cleanup(func() { _ = db.Close() })
 
-	return db
+	return db, tDB
 }
 
 // connectPgxDB connects to the database with retries using pgx.

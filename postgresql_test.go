@@ -13,11 +13,13 @@ const testPostgresImage = "17.2"
 func Test_PgxGooseDB(t *testing.T) {
 	t.Parallel()
 
-	db := GetPgxPool(t,
+	db, informer := GetPgxPool(t,
 		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactoryPGX),
 		WithDockerImage(testPostgresImage),
 	)
+
+	checkInformer(t, DefaultPostgresDSN, informer)
 
 	testPgxHelper(t, db)
 }
@@ -25,12 +27,14 @@ func Test_PgxGooseDB(t *testing.T) {
 func Test_PgxGomigrateDB(t *testing.T) {
 	t.Parallel()
 
-	db := GetPgxPool(t,
+	db, informer := GetPgxPool(t,
 		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/gomigrate", GolangMigrateFactory),
 		WithDockerImage(testPostgresImage),
 		WithMode(RunModeDocker), // force run in docker
 	)
+
+	checkInformer(t, DefaultPostgresDSN, informer)
 
 	testPgxHelper(t, db)
 }
@@ -38,7 +42,7 @@ func Test_PgxGomigrateDB(t *testing.T) {
 func Test_LibPGDB(t *testing.T) {
 	t.Parallel()
 
-	db := GetPqConn(t,
+	db, _ := GetPqConn(t,
 		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactoryPQ),
 		WithDockerImage(testPostgresImage),

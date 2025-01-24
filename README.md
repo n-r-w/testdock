@@ -95,7 +95,7 @@ func TestDatabase(t *testing.T) {
     configuration.
     */
 
-    pool := testdock.GetPgxPool(t, 
+    pool, _ := testdock.GetPgxPool(t, 
         testdock.DefaultPostgresDSN,
         testdock.WithMigrations("migrations", testdock.GooseMigrateFactoryPGX),        
     )
@@ -115,7 +115,7 @@ import (
 
 func TestMongoDB(t *testing.T) {        
     // Get a connection to a test database
-    db := testdock.GetMongoDatabase(t, testdock.DefaultMongoDSN,
+    db, _ := testdock.GetMongoDatabase(t, testdock.DefaultMongoDSN,
         testdock.WithMode(testdock.RunModeDocker),
         testdock.WithMigrations("migrations", testdock.GolangMigrateFactory),
     )
@@ -166,7 +166,7 @@ TestDock supports two popular migration tools:
 <https://github.com/pressly/goose>
 
 ```go
- db := GetPqConn(t,
+ db, _ := GetPqConn(t,
     "postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
     testdock.WithMigrations("migrations/pg/goose", testdock.GooseMigrateFactoryPQ),
     testdock.WithDockerImage("17.2"),
@@ -178,7 +178,7 @@ TestDock supports two popular migration tools:
 <https://github.com/golang-migrate/migrate>
 
 ```go
-db := GetMongoDatabase(t,
+db, _ := GetMongoDatabase(t,
     testdock.DefaultMongoDSN,
     WithDockerRepository("mongo"),
     WithDockerImage("6.0.20"),

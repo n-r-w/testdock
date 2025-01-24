@@ -14,12 +14,14 @@ func TestMongoDB(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test database and return a MongoDB client
-	db := GetMongoDatabase(t,
+	db, informer := GetMongoDatabase(t,
 		DefaultMongoDSN,
 		WithDockerRepository("mongo"),
 		WithDockerImage("6.0.20"),
 		WithMigrations("migrations/mongodb", GolangMigrateFactory),
 	)
+
+	checkInformer(t, DefaultMongoDSN, informer)
 
 	// Test collection
 	collection := db.Collection("test_collection")

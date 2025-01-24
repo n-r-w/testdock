@@ -10,7 +10,7 @@ import (
 
 // GetMySQLConn inits a test mysql database, applies migrations.
 // Use user root for docker test database.
-func GetMySQLConn(tb testing.TB, dsn string, opt ...Option) *sql.DB {
+func GetMySQLConn(tb testing.TB, dsn string, opt ...Option) (*sql.DB, Informer) {
 	tb.Helper()
 
 	url, err := parseURL(dsn)

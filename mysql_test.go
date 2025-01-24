@@ -9,12 +9,14 @@ import (
 func Test_MySQLDB(t *testing.T) {
 	t.Parallel()
 
-	db := GetMySQLConn(t,
+	db, informer := GetMySQLConn(t,
 		DefaultMySQLDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactoryMySQL),
 		WithRetryTimeout(time.Second*5),
 		WithTotalRetryDuration(time.Second*60), //nolint:mnd // for Docker 30s not enough
 	)
+
+	checkInformer(t, DefaultMySQLDSN, informer)
 
 	testSQLHelper(t, db)
 }
