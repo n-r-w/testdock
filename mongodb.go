@@ -16,6 +16,8 @@ const mongoDriverName = "mongodb"
 func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongo.Database, Informer) {
 	tb.Helper()
 
+	ctx := context.Background()
+
 	url, err := parseURL(dsn)
 	if err != nil {
 		tb.Fatalf("failed to parse dsn: %v", err)
@@ -33,11 +35,11 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongo.Database
 
 	optPrepared = append(optPrepared, opt...)
 
-	tDB := newTDB(tb, mongoDriverName, dsn, optPrepared)
+	tDB := newTDB(ctx, tb, mongoDriverName, dsn, optPrepared)
 
-	client, err := tDB.connectMongoDB()
+	client, err := tDB.connectMongoDB(ctx)
 	if err != nil {
-		tDB.logger.Fatalf("%v", err)
+		tb.Fatalf("cannot connect to mongo: %v", err)
 	}
 
 	tb.Cleanup(func() { _ = client.Disconnect(context.Background()) })
@@ -46,14 +48,13 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongo.Database
 }
 
 // connectDB connects to MongoDB with retries
-func (d *testDB) connectMongoDB() (*mongo.Client, error) {
+func (d *testDB) connectMongoDB(ctx context.Context) (*mongo.Client, error) {
 	var (
 		client *mongo.Client
 		err    error
-		ctx    = context.Background()
 	)
 
-	err = d.retryConnect(d.url.string(true), func() error {
+	err = d.retryConnect(ctx, d.url.string(true), func() error {
 		client, err = mongo.Connect(ctx, options.Client().ApplyURI(d.url.string(false)))
 		if err != nil {
 			return fmt.Errorf("mongo connect: %w", err)

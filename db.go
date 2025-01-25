@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
+	"github.com/n-r-w/ctxlog"
 )
 
 // Informer interface for database information.
@@ -38,7 +39,7 @@ type PrepareCleanUp func(db *sql.DB, databaseName string) error
 type testDB struct {
 	t testing.TB
 
-	logger Logger // unified way to logging
+	logger ctxlog.ILogger // unified way to logging
 
 	databaseName string // name of the test database
 	url          *dbURL // parsed database connection string
@@ -70,13 +71,13 @@ var (
 )
 
 // newTDB creates a new test database and applies migrations.
-func newTDB(tb testing.TB, driver, dsn string, opt []Option) *testDB {
+func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option) *testDB {
 	tb.Helper()
 
 	var (
 		db = &testDB{
 			t:                  tb,
-			logger:             NewDefaultLogger(tb),
+			logger:             ctxlog.Must(ctxlog.WithTesting(tb)),
 			driver:             driver,
 			dsn:                dsn,
 			mode:               RunModeAuto,
@@ -88,7 +89,7 @@ func newTDB(tb testing.TB, driver, dsn string, opt []Option) *testDB {
 
 	defer func() {
 		if errResult != nil {
-			db.logger.Fatalf("%v", errResult)
+			tb.Fatalf("cannot create test database: %v", errResult)
 		}
 	}()
 
@@ -108,32 +109,33 @@ func newTDB(tb testing.TB, driver, dsn string, opt []Option) *testDB {
 	defer mu.Unlock()
 
 	if db.mode == RunModeDocker {
-		db.logger.Logf("[%s] using docker test database", db.dsnNoPass)
-		if errResult = db.createDockerResources(); errResult != nil {
+		db.logger.Info(ctx, "using docker test database", "dsn", db.dsnNoPass)
+		if errResult = db.createDockerResources(ctx); errResult != nil {
 			return nil
 		}
 	} else {
-		db.logger.Logf("[%s] using real test database", db.dsnNoPass)
+		db.logger.Info(ctx, "using real test database", "dsn", db.dsnNoPass)
 	}
 
-	if errResult = db.createTestDatabase(); errResult != nil {
-		if err := db.close(); err != nil {
-			db.logger.Logf("[%s] failed to close test database: %v", db.dsnNoPass, err)
+	if errResult = db.createTestDatabase(ctx); errResult != nil {
+		if err := db.close(ctx); err != nil {
+			db.logger.Info(ctx, "failed to close test database", "dsn", db.dsnNoPass, "error", err)
 		}
 		return nil
 	}
 
 	if db.migrationsDir != "" {
-		if errResult = db.migrationsUp(); errResult != nil {
+		if errResult = db.migrationsUp(ctx); errResult != nil {
 			return nil
 		}
 	}
 
 	tb.Cleanup(func() {
-		if err := db.close(); err != nil {
-			db.logger.Logf("[%s] failed to close test database: %v", db.dsnNoPass, err)
+		ctx := context.Background()
+		if err := db.close(ctx); err != nil {
+			db.logger.Info(ctx, "failed to close test database", "dsn", db.dsnNoPass, "error", err)
 		} else {
-			db.logger.Logf("[%s] test database closed", db.dsnNoPass)
+			db.logger.Info(ctx, "test database closed", "dsn", db.dsnNoPass)
 		}
 	})
 
@@ -141,13 +143,13 @@ func newTDB(tb testing.TB, driver, dsn string, opt []Option) *testDB {
 }
 
 // migrationsUp applies migrations to the database.
-func (d *testDB) migrationsUp() error {
-	d.logger.Logf("[%s] migrations up start", d.dsnNoPass)
-	defer d.logger.Logf("[%s] migrations up end", d.dsnNoPass)
+func (d *testDB) migrationsUp(ctx context.Context) error {
+	d.logger.Info(ctx, "migrations up start", "dsn", d.dsnNoPass)
+	defer d.logger.Info(ctx, "migrations up end", "dsn", d.dsnNoPass)
 
 	dsn := d.url.replaceDatabase(d.databaseName).string(false)
 
-	migrator, err := d.MigrateFactory(dsn, d.migrationsDir, d.logger)
+	migrator, err := d.MigrateFactory(d.t, dsn, d.migrationsDir, d.logger)
 	if err != nil {
 		return fmt.Errorf("new migrator: %w", err)
 	}
@@ -160,10 +162,10 @@ func (d *testDB) migrationsUp() error {
 }
 
 // close closes the test database.
-func (d *testDB) close() error {
+func (d *testDB) close(ctx context.Context) error {
 	if d.mode != RunModeDocker {
 		// remove the database created before applying the migrations
-		d.logger.Logf("[%s] deleting test database %s", d.dsnNoPass, d.databaseName)
+		d.logger.Info(ctx, "deleting test database", "dsn", d.dsnNoPass, "database", d.databaseName)
 
 		dsn := d.url.string(false)
 		db, err := sql.Open(d.driver, dsn)
@@ -176,7 +178,7 @@ func (d *testDB) close() error {
 
 		for _, prepareCleanUp := range d.prepareCleanUp {
 			if err := prepareCleanUp(db, d.databaseName); err != nil {
-				d.logger.Logf("[%s] failed to prepare clean up: %v", d.dsnNoPass, err)
+				d.logger.Info(ctx, "failed to prepare clean up", "dsn", d.dsnNoPass, "error", err)
 			}
 		}
 
@@ -184,27 +186,27 @@ func (d *testDB) close() error {
 			return fmt.Errorf("drop db: %w", err)
 		}
 
-		d.logger.Logf("[%s] test db %s deleted", d.dsnNoPass, d.databaseName)
+		d.logger.Info(ctx, "test database deleted", "dsn", d.dsnNoPass, "database", d.databaseName)
 	}
 
 	return nil
 }
 
 // initDatabase creates a test database or connects to an existing one.
-func (d *testDB) createTestDatabase() error {
+func (d *testDB) createTestDatabase(ctx context.Context) error {
 	if d.driver == mongoDriverName {
 		return nil
 	}
 
-	return d.createSQLDatabase()
+	return d.createSQLDatabase(ctx)
 }
 
 // retryConnect connects to the database with retries.
-func (d *testDB) retryConnect(info string, op func() error) error {
+func (d *testDB) retryConnect(ctx context.Context, info string, op func() error) error {
 	var attempt int
 	operation := func() (struct{}, error) {
 		if err := op(); err != nil {
-			d.logger.Logf("[%s] retrying attempt %d: %v", info, attempt, err)
+			d.logger.Info(ctx, "retrying operation", "info", info, "attempt", attempt, "error", err)
 			attempt++
 			return struct{}{}, err
 		}

@@ -42,7 +42,8 @@ func Test_PgxGomigrateDB(t *testing.T) {
 func Test_LibPGDB(t *testing.T) {
 	t.Parallel()
 
-	db, _ := GetPqConn(t,
+	ctx := context.Background()
+	db, _ := GetPqConn(ctx, t,
 		DefaultPostgresDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactoryPQ),
 		WithDockerImage(testPostgresImage),

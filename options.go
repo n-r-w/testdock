@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/n-r-w/ctxlog"
 )
 
 const (
@@ -98,7 +99,7 @@ func WithTotalRetryDuration(totalRetryDuration time.Duration) Option {
 
 // WithLogger sets the logger for the test database.
 // The default is logger from testing.TB.
-func WithLogger(logger Logger) Option {
+func WithLogger(logger ctxlog.ILogger) Option {
 	return func(o *testDB) {
 		o.logger = logger
 	}
