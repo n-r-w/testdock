@@ -17,11 +17,13 @@ import (
 func GetPgxPool(tb testing.TB, dsn string, opt ...Option) (*pgxpool.Pool, Informer) {
 	tb.Helper()
 
-	tDB := newTDB(tb, "pgx", dsn, getPostgresOptions(tb, dsn, opt...))
+	ctx := context.Background()
 
-	db, err := tDB.connectPgxDB()
+	tDB := newTDB(ctx, tb, "pgx", dsn, getPostgresOptions(tb, dsn, opt...))
+
+	db, err := tDB.connectPgxDB(ctx)
 	if err != nil {
-		tDB.logger.Fatalf("%v", err)
+		tb.Fatalf("cannot connect to postgres: %v", err)
 	}
 
 	tb.Cleanup(func() { db.Close() })
@@ -31,14 +33,14 @@ func GetPgxPool(tb testing.TB, dsn string, opt ...Option) (*pgxpool.Pool, Inform
 
 // GetPqConn inits a test postgresql (pq driver) database, applies migrations,
 // and returns sql connection to the database.
-func GetPqConn(tb testing.TB, dsn string, opt ...Option) (*sql.DB, Informer) {
+func GetPqConn(ctx context.Context, tb testing.TB, dsn string, opt ...Option) (*sql.DB, Informer) {
 	tb.Helper()
 
-	tDB := newTDB(tb, "postgres", dsn, getPostgresOptions(tb, dsn, opt...))
+	tDB := newTDB(ctx, tb, "postgres", dsn, getPostgresOptions(tb, dsn, opt...))
 
-	db, err := tDB.connectSQLDB(true)
+	db, err := tDB.connectSQLDB(ctx, true)
 	if err != nil {
-		tDB.logger.Fatalf("%v", err)
+		tb.Fatalf("cannot connect to postgres: %v", err)
 	}
 
 	tb.Cleanup(func() { _ = db.Close() })
@@ -47,15 +49,12 @@ func GetPqConn(tb testing.TB, dsn string, opt ...Option) (*sql.DB, Informer) {
 }
 
 // connectPgxDB connects to the database with retries using pgx.
-func (d *testDB) connectPgxDB() (*pgxpool.Pool, error) {
+func (d *testDB) connectPgxDB(ctx context.Context) (*pgxpool.Pool, error) {
+	var db *pgxpool.Pool
 	dbURL := d.url.replaceDatabase(d.databaseName)
-	d.logger.Logf("[%s] connecting to test database", dbURL.string(true))
+	d.logger.Info(ctx, "connecting to test database", "url", dbURL.string(true))
 
-	var (
-		db  *pgxpool.Pool
-		ctx = context.Background()
-	)
-	err := d.retryConnect(dbURL.string(true), func() (err error) {
+	err := d.retryConnect(ctx, dbURL.string(true), func() (err error) {
 		db, err = pgxpool.New(ctx, dbURL.string(false))
 		if err != nil {
 			return err

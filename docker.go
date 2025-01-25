@@ -29,7 +29,7 @@ type dockerResourceInfo struct {
 }
 
 // createDockerResources create a pool and a resource for creating a test database in docker.
-func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
+func (d *testDB) createDockerResources(ctx context.Context) error { //nolint:gocognit // ok
 	globalDockerMu.Lock()
 
 	info, ok := globalDockerResources[d.dsn]
@@ -60,7 +60,7 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 			}
 			for _, env := range proxyEnv {
 				if os.Getenv(env) != "" {
-					d.logger.Logf("dockertest unset proxy env %s", env)
+					d.logger.Info(ctx, "unset proxy env", "component", "docker", "env", env)
 					_ = os.Unsetenv(env)
 				}
 			}
@@ -72,7 +72,7 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 			return fmt.Errorf("dockertest ping: %w", err)
 		}
 
-		d.logger.Logf("dockertest pool created")
+		d.logger.Info(ctx, "pool created", "component", "docker")
 
 		defer func() {
 			globalDockerMu.Lock()
@@ -80,7 +80,7 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 
 			if len(globalDockerResources) == 0 {
 				globalDockerPool = nil
-				d.logger.Logf("dockertest pool purged")
+				d.logger.Info(ctx, "pool purged", "component", "docker")
 			}
 		}()
 	}
@@ -134,7 +134,7 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 			}
 			if needNextPort {
 				// increase hostPort by 1
-				d.logger.Logf("[%s] port is already allocated, try next port %d", logDsn, d.url.Port+1)
+				d.logger.Info(ctx, "port is already allocated, trying next port", "dsn", logDsn, "next_port", d.url.Port+1)
 				d.url.Port++
 				continue
 			}
@@ -144,8 +144,7 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 				break
 			}
 
-			d.logger.Logf("[%s] dockertest RunWithOptions failed, attempt %d, error %v",
-				logDsn, attempt, err)
+			d.logger.Info(ctx, "RunWithOptions failed", "component", "docker", "dsn", logDsn, "attempt", attempt, "error", err)
 			time.Sleep(sleepTime)
 		}
 
@@ -155,11 +154,11 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 
 		info.port = d.url.Port
 
-		d.logger.Logf("[%s] dockertest resources created", logDsn)
+		d.logger.Info(ctx, "resources created", "component", "docker", "dsn", logDsn)
 	} else {
 		d.url.Port = info.port // restore port
 
-		d.logger.Logf("[%s] dockertest using existing resources", logDsn)
+		d.logger.Info(ctx, "use existing resources", "component", "docker", "dsn", logDsn)
 	}
 
 	globalDockerMu.Lock()
@@ -169,6 +168,8 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 	info.count++
 
 	d.t.Cleanup(func() {
+		ctx := context.Background()
+
 		info.mu.Lock()
 		defer info.mu.Unlock()
 		info.count--
@@ -188,19 +189,19 @@ func (d *testDB) createDockerResources() error { //nolint:gocognit // ok
 			operation := func() (struct{}, error) {
 				if err := globalDockerPool.Purge(info.resource); err != nil {
 					attempt++
-					d.logger.Logf("[%s] dockertest purge attempt %d failed: %v", logDsn, attempt, err)
+					// Closure needs access to context, so we'll pass background context since this is a cleanup function
+					d.logger.Info(ctx, "purge attempt failed", "component", "docker", "dsn", logDsn, "attempt", attempt, "error", err)
 					return struct{}{}, err
 				}
 				return struct{}{}, nil
 			}
 
-			if _, err := backoff.Retry(
-				context.Background(), operation,
+			if _, err := backoff.Retry(ctx, operation,
 				backoff.WithBackOff(backoff.NewConstantBackOff(retryTimeout)),
 				backoff.WithMaxElapsedTime(maxTime)); err != nil {
-				d.logger.Logf("[%s] dockertest purge failed after retries attempt %d: %v", logDsn, attempt, err)
+				d.logger.Info(ctx, "purge failed after retries", "component", "docker", "dsn", logDsn, "attempt", attempt, "error", err)
 			} else {
-				d.logger.Logf("[%s] dockertest resources purged successfully after %d attempts", logDsn, attempt)
+				d.logger.Info(ctx, "resources purged successfully", "component", "docker", "dsn", logDsn, "attempts", attempt)
 			}
 		}
 	})

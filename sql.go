@@ -1,6 +1,7 @@
 package testdock
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"testing"
@@ -12,14 +13,13 @@ import (
 func GetSQLConn(tb testing.TB, driver, dsn string, opt ...Option) (*sql.DB, Informer) {
 	tb.Helper()
 
-	tDB := newTDB(tb, driver, dsn, opt)
+	ctx := context.Background()
+	tDB := newTDB(ctx, tb, driver, dsn, opt)
 
-	db, err := tDB.connectSQLDB(true)
+	db, err := tDB.connectSQLDB(ctx, true)
 	if err != nil {
-		tDB.logger.Fatalf("%v", err)
+		tb.Fatalf("cannot connect to database: %v", err)
 	}
-
-	
 
 	tb.Cleanup(func() { _ = db.Close() })
 
@@ -28,7 +28,7 @@ func GetSQLConn(tb testing.TB, driver, dsn string, opt ...Option) (*sql.DB, Info
 
 // connectSQLDB connects to the database with retries using database/sql.
 // testDatabase: if true, will be connected to the temporary test database.
-func (d *testDB) connectSQLDB(testDatabase bool) (*sql.DB, error) {
+func (d *testDB) connectSQLDB(ctx context.Context, testDatabase bool) (*sql.DB, error) {
 	var dbURL *dbURL
 	if testDatabase {
 		dbURL = d.url.replaceDatabase(d.databaseName)
@@ -36,10 +36,10 @@ func (d *testDB) connectSQLDB(testDatabase bool) (*sql.DB, error) {
 		dbURL = d.url.replaceDatabase(d.connectDatabase)
 	}
 
-	d.logger.Logf("[%s] connecting to test database", dbURL.string(true))
+	d.logger.Info(ctx, "connecting to test database", "url", dbURL.string(true))
 
 	var db *sql.DB
-	err := d.retryConnect(dbURL.string(true), func() (err error) {
+	err := d.retryConnect(ctx, dbURL.string(true), func() (err error) {
 		db, err = sql.Open(d.driver, dbURL.string(false))
 		if err != nil {
 			return err
@@ -57,10 +57,10 @@ func (d *testDB) connectSQLDB(testDatabase bool) (*sql.DB, error) {
 	return db, nil
 }
 
-func (d *testDB) createSQLDatabase() error {
-	d.logger.Logf("[%s] creating new test sql dastabase %s", d.dsnNoPass, d.databaseName)
+func (d *testDB) createSQLDatabase(ctx context.Context) error {
+	d.logger.Info(ctx, "creating new test sql database", "dsn", d.dsnNoPass, "database", d.databaseName)
 
-	db, err := d.connectSQLDB(false)
+	db, err := d.connectSQLDB(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (d *testDB) createSQLDatabase() error {
 		return fmt.Errorf("create db: %w", err)
 	}
 
-	d.logger.Logf("[%s] new test sql dastabase %s created", d.dsnNoPass, d.databaseName)
+	d.logger.Info(ctx, "new test sql database created", "dsn", d.dsnNoPass, "database", d.databaseName)
 
 	return nil
 }
