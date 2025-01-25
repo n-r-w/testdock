@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/lib/pq v1.10.9
-	github.com/n-r-w/ctxlog v0.0.0-20250125225454-e40a4b2678d2
+	github.com/n-r-w/ctxlog v1.0.1
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/pressly/goose/v3 v3.24.1
 	github.com/stretchr/testify v1.10.0
