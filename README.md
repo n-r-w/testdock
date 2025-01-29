@@ -192,7 +192,7 @@ You can also use a custom migration tool implementing the `testdock.MigrateFacto
 
 ## Requirements
 
-- Go 1.22 or higher
+- Go 1.23 or higher
 - Docker (when using `RunModeDocker` or `RunModeAuto`)
 
 ## License
