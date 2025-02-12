@@ -88,9 +88,9 @@ func TestDatabase(t *testing.T) {
     // Get a connection pool to a test database.
 
     /* 
-    If the environment variable TESTDOCK_DSN_POSTGRES is set, then the input 
+    If the environment variable TESTDOCK_DSN_PGX is set, then the input 
     connection string is ignored and the value from the environment variable
-    is used. If the environment variable TESTDOCK_DSN_POSTGRES is not set, 
+    is used. If the environment variable TESTDOCK_DSN_PGX is not set, 
     then the input connection string is used to generate the Docker container 
     configuration.
     */
