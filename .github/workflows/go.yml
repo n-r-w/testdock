@@ -47,7 +47,7 @@ jobs:
       run: go test -race -v ./...
 
     - name: Update coverage report
-      uses: ncruces/go-coverage-report@v0
+      uses: ncruces/go-coverage-report@494b2847891f4dd3b10f6704ca533367dbb7493d
       with:
         report: true
         chart: true
