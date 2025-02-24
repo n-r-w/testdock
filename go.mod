@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/georgysavva/scany/v2 v2.1.3
-	github.com/go-sql-driver/mysql v1.8.1
+	github.com/go-sql-driver/mysql v1.9.0
 	github.com/golang-migrate/migrate/v4 v4.18.2
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.2
