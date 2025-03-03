@@ -14,7 +14,7 @@ require (
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/pressly/goose/v3 v3.24.1
 	github.com/stretchr/testify v1.10.0
-	go.mongodb.org/mongo-driver v1.17.2
+	go.mongodb.org/mongo-driver v1.17.3
 )
 
 require (
