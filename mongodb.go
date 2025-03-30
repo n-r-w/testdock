@@ -27,11 +27,14 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongo.Database
 	optPrepared = append(optPrepared,
 		WithDockerRepository("mongo"),
 		WithDockerImage("latest"),
-		WithDockerEnv([]string{
-			fmt.Sprintf("MONGO_INITDB_ROOT_USERNAME=%s", url.User),
-			fmt.Sprintf("MONGO_INITDB_ROOT_PASSWORD=%s", url.Password),
-		}),
 	)
+	if url.User != "" {
+		optPrepared = append(optPrepared,
+			WithDockerEnv([]string{
+				fmt.Sprintf("MONGO_INITDB_ROOT_USERNAME=%s", url.User),
+				fmt.Sprintf("MONGO_INITDB_ROOT_PASSWORD=%s", url.Password),
+			}))
+	}
 
 	optPrepared = append(optPrepared, opt...)
 
@@ -42,9 +45,19 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongo.Database
 		tb.Fatalf("cannot connect to mongo: %v", err)
 	}
 
-	tb.Cleanup(func() { _ = client.Disconnect(context.Background()) })
+	mongoDatabase := client.Database(tDB.databaseName)
 
-	return client.Database(tDB.databaseName), tDB
+	tb.Cleanup(func() {
+		if tDB.mode != RunModeDocker {
+			if err := mongoDatabase.Drop(ctx); err != nil {
+				tb.Logf("failed to drop database %s: %v", tDB.databaseName, err)
+			}
+		}
+
+		_ = client.Disconnect(context.Background())
+	})
+
+	return mongoDatabase, tDB
 }
 
 // connectDB connects to MongoDB with retries
@@ -54,8 +67,10 @@ func (d *testDB) connectMongoDB(ctx context.Context) (*mongo.Client, error) {
 		err    error
 	)
 
-	err = d.retryConnect(ctx, d.url.string(true), func() error {
-		client, err = mongo.Connect(ctx, options.Client().ApplyURI(d.url.string(false)))
+	url := d.url.replaceDatabase(d.databaseName)
+
+	err = d.retryConnect(ctx, url.string(true), func() error {
+		client, err = mongo.Connect(ctx, options.Client().ApplyURI(url.string(false)))
 		if err != nil {
 			return fmt.Errorf("mongo connect: %w", err)
 		}
@@ -67,7 +82,7 @@ func (d *testDB) connectMongoDB(ctx context.Context) (*mongo.Client, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("connect mongo url (%s): %w", d.url.string(false), err)
+		return nil, fmt.Errorf("connect mongo url (%s): %w", url.string(false), err)
 	}
 
 	return client, nil

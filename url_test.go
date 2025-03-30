@@ -27,11 +27,6 @@ func TestURL_Parse(t *testing.T) {
 			wantErr: "invalid connection string format: '://' exists, but no protocol",
 		},
 		{
-			name:    "invalid format - missing credentials",
-			connStr: "postgres://localhost",
-			wantErr: "invalid connection string format: missing credentials",
-		},
-		{
 			name:    "invalid format - missing password",
 			connStr: "postgres://user@localhost",
 			wantErr: "invalid connection string format: missing password",
@@ -58,6 +53,15 @@ func TestURL_Parse(t *testing.T) {
 		},
 		{
 			name:    "minimal valid URL",
+			connStr: "localhost:5432",
+			want: &dbURL{
+				Host:    "localhost",
+				Port:    5432,
+				Options: make(map[string]string),
+			},
+		},
+		{
+			name:    "minimal valid URL with user and password",
 			connStr: "user:pass@localhost:5432",
 			want: &dbURL{
 				User:     "user",
@@ -65,6 +69,19 @@ func TestURL_Parse(t *testing.T) {
 				Host:     "localhost",
 				Port:     5432,
 				Options:  make(map[string]string),
+			},
+		},
+		{
+			name:    "no user and password",
+			connStr: "mongodb://localhost:27017/testdb?directConnection=true",
+			want: &dbURL{
+				Protocol: "mongodb",
+				Host:     "localhost",
+				Port:     27017,
+				Database: "testdb",
+				Options: map[string]string{
+					"directConnection": "true",
+				},
 			},
 		},
 		{
