@@ -124,6 +124,7 @@ func (d *testDB) createDockerResources(ctx context.Context) error { //nolint:goc
 			bindErrors := []string{
 				"address already in use",
 				"port is already allocated",
+				"failed to bind host port",
 			}
 			needNextPort := false
 			for _, bindError := range bindErrors {

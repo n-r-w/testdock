@@ -4,17 +4,17 @@ go 1.23
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/georgysavva/scany/v2 v2.1.3
-	github.com/go-sql-driver/mysql v1.8.1
+	github.com/georgysavva/scany/v2 v2.1.4
+	github.com/go-sql-driver/mysql v1.9.1
 	github.com/golang-migrate/migrate/v4 v4.18.2
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.2
+	github.com/jackc/pgx/v5 v5.7.4
 	github.com/lib/pq v1.10.9
 	github.com/n-r-w/ctxlog v1.0.3
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/pressly/goose/v3 v3.24.1
 	github.com/stretchr/testify v1.10.0
-	go.mongodb.org/mongo-driver v1.17.2
+	go.mongodb.org/mongo-driver v1.17.3
 )
 
 require (

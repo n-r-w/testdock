@@ -55,30 +55,28 @@ func parseURL(connStr string) (*dbURL, error) {
 
 	// Find the last @ to properly handle @ in passwords
 	atIndex := strings.LastIndex(rest, "@")
-	if atIndex == -1 {
-		return nil, errors.New("invalid connection string format: missing credentials")
-	}
+	if atIndex >= 0 {
+		credentials := rest[:atIndex]
+		rest = rest[atIndex+1:]
 
-	credentials := rest[:atIndex]
-	hostPart := rest[atIndex+1:]
-
-	// Parse credentials
-	credParts := strings.SplitN(credentials, ":", splitCount)
-	if len(credParts) != splitCount {
-		return nil, errors.New("invalid connection string format: missing password")
-	}
-	u.User = credParts[0]
-	if u.User == "" {
-		return nil, errors.New("user is required")
-	}
-	u.Password = credParts[1]
-	if u.Password == "" {
-		return nil, errors.New("password is required")
+		// Parse credentials
+		credParts := strings.SplitN(credentials, ":", splitCount)
+		if len(credParts) != splitCount {
+			return nil, errors.New("invalid connection string format: missing password")
+		}
+		u.User = credParts[0]
+		if u.User == "" {
+			return nil, errors.New("user is required")
+		}
+		u.Password = credParts[1]
+		if u.Password == "" {
+			return nil, errors.New("password is required")
+		}
 	}
 
 	// Split query parameters if they exist
-	hostAndQuery := strings.SplitN(hostPart, "?", splitCount)
-	hostPart = hostAndQuery[0]
+	hostAndQuery := strings.SplitN(rest, "?", splitCount)
+	rest = hostAndQuery[0]
 
 	// Parse query parameters if they exist
 	if len(hostAndQuery) > 1 {
@@ -92,28 +90,28 @@ func parseURL(connStr string) (*dbURL, error) {
 	}
 
 	// Parse database if exists
-	hostAndDB := strings.SplitN(hostPart, "/", splitCount)
-	hostPart = hostAndDB[0]
+	hostAndDB := strings.SplitN(rest, "/", splitCount)
+	rest = hostAndDB[0]
 	if len(hostAndDB) > 1 {
 		u.Database = hostAndDB[1]
 	}
 
 	// Check if transport is specified
-	if strings.Contains(hostPart, "(") && strings.HasSuffix(hostPart, ")") {
-		transportParts := strings.SplitN(hostPart, "(", splitCount)
+	if strings.Contains(rest, "(") && strings.HasSuffix(rest, ")") {
+		transportParts := strings.SplitN(rest, "(", splitCount)
 		if len(transportParts) != splitCount {
 			return nil, errors.New("invalid connection string format: malformed transport")
 		}
 		u.Transport = transportParts[0]
-		hostPart = strings.TrimSuffix(transportParts[1], ")")
+		rest = strings.TrimSuffix(transportParts[1], ")")
 	}
 
-	if hostPart == "" {
+	if rest == "" {
 		return nil, errors.New("host is required")
 	}
 
 	// Parse host and port
-	hostAndPort := strings.SplitN(hostPart, ":", splitCount)
+	hostAndPort := strings.SplitN(rest, ":", splitCount)
 	if len(hostAndPort) != splitCount {
 		return nil, errors.New("invalid connection string format: missing port")
 	}
@@ -151,15 +149,17 @@ func (u *dbURL) string(hidePassword bool) string {
 		b.WriteString("://")
 	}
 
-	// Write credentials
-	b.WriteString(u.User)
-	b.WriteString(":")
-	if hidePassword {
-		b.WriteString("*****")
-	} else {
-		b.WriteString(u.Password)
+	if u.User != "" {
+		// Write credentials
+		b.WriteString(u.User)
+		b.WriteString(":")
+		if hidePassword {
+			b.WriteString("*****")
+		} else {
+			b.WriteString(u.Password)
+		}
+		b.WriteString("@")
 	}
-	b.WriteString("@")
 
 	// Write transport, host and port
 	if u.Transport != "" {

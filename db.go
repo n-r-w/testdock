@@ -164,6 +164,10 @@ func (d *testDB) migrationsUp(ctx context.Context) error {
 // close closes the test database.
 func (d *testDB) close(ctx context.Context) error {
 	if d.mode != RunModeDocker {
+		if d.driver == mongoDriverName {
+			return nil
+		}
+
 		// remove the database created before applying the migrations
 		d.logger.Info(ctx, "deleting test database", "dsn", d.dsnNoPass, "database", d.databaseName)
 
