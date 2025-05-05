@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"testing"
 
-	mongov1 "go.mongodb.org/mongo-driver/mongo"
-	optionsv1 "go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// GetMongoDatabase initializes a test MongoDB database, applies migrations, and returns a database connection.
-func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongov1.Database, Informer) {
+// mongo driver name for separating sql and mongo
+const mongoDriverName = "mongodb"
+
+// GetMongoDatabaseV2 initializes a test MongoDB database, applies migrations, and returns a database connection.
+func GetMongoDatabaseV2(tb testing.TB, dsn string, opt ...Option) (*mongo.Database, Informer) {
 	tb.Helper()
 
 	ctx := context.Background()
@@ -37,7 +40,7 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongov1.Databa
 
 	tDB := newTDB(ctx, tb, mongoDriverName, dsn, optPrepared)
 
-	client, err := tDB.connectMongoDB(ctx)
+	client, err := tDB.connectMongoDBv2(ctx)
 	if err != nil {
 		tb.Fatalf("cannot connect to mongo: %v", err)
 	}
@@ -57,17 +60,17 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongov1.Databa
 	return mongoDatabase, tDB
 }
 
-// connectMongoDB connects to MongoDB with retries
-func (d *testDB) connectMongoDB(ctx context.Context) (*mongov1.Client, error) {
+// connectMongoDBv2 connects to MongoDB with retries
+func (d *testDB) connectMongoDBv2(ctx context.Context) (*mongo.Client, error) {
 	var (
-		client *mongov1.Client
+		client *mongo.Client
 		err    error
 	)
 
 	url := d.url.replaceDatabase(d.databaseName)
 
 	err = d.retryConnect(ctx, url.string(true), func() error {
-		client, err = mongov1.Connect(ctx, optionsv1.Client().ApplyURI(url.string(false)))
+		client, err = mongo.Connect(options.Client().ApplyURI(url.string(false)))
 		if err != nil {
 			return fmt.Errorf("mongo connect: %w", err)
 		}
