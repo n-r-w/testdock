@@ -12,7 +12,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/n-r-w/ctxlog v1.0.3
 	github.com/ory/dockertest/v3 v3.12.0
-	github.com/pressly/goose/v3 v3.24.2
+	github.com/pressly/goose/v3 v3.24.3
 	github.com/stretchr/testify v1.10.0
 	go.mongodb.org/mongo-driver v1.17.3
 	go.mongodb.org/mongo-driver/v2 v2.2.0
