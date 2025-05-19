@@ -99,8 +99,8 @@ github.com/montanaflynn/stats v0.7.1 h1:etflOAAHORrCC44V+aR6Ftzort912ZU+YLiSTuV8
 github.com/montanaflynn/stats v0.7.1/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
 github.com/morikuni/aec v1.0.0 h1:nP9CBfwrvYnBRgY6qfDQkygYDmYwOilePFkwzv4dU8A=
 github.com/morikuni/aec v1.0.0/go.mod h1:BbKIizmSmc5MMPqRYbxO4ZU0S0+P200+tUnFx7PXmsc=
-github.com/n-r-w/ctxlog v1.0.3 h1:ZL+3CIhiSFIjT6HHu3bwLgsl9zPWJsdcdDJLtBZNqRY=
-github.com/n-r-w/ctxlog v1.0.3/go.mod h1:MZ7sxKTgLXL1pFrPjScPEXhqL1bv/qhqHhpjM1MVdgw=
+github.com/n-r-w/ctxlog v1.1.0 h1:N8F84uI6OhMBhgIDXVTKJouPnUj8OHjorTaCXMmbxds=
+github.com/n-r-w/ctxlog v1.1.0/go.mod h1:qM2/mpz5oihXKqEfRlJqrKQbi9csaLffQIgHBKWSyKo=
 github.com/ncruces/go-strftime v0.1.9 h1:bY0MQC28UADQmHmaF5dgpLmImcShSi2kHU9XLdhx/f4=
 github.com/ncruces/go-strftime v0.1.9/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
