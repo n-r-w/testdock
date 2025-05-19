@@ -8,7 +8,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.2
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v5 v5.7.5
 	github.com/lib/pq v1.10.9
 	github.com/n-r-w/ctxlog v1.0.3
 	github.com/ory/dockertest/v3 v3.12.0
