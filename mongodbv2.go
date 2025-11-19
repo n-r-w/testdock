@@ -47,8 +47,15 @@ func GetMongoDatabaseV2(tb testing.TB, dsn string, opt ...Option) (*mongo.Databa
 
 	tb.Cleanup(func() {
 		if tDB.mode != RunModeDocker {
-			db := client.Database(tDB.databaseName)
-			if err := db.Drop(ctx); err != nil {
+			// protect against closing connection during tests
+			clientClean, err := tDB.connectMongoDBv2(ctx)
+			if err != nil {
+				tb.Logf("cannot connect to mongo for cleanup: %v", err)
+				return
+			}
+
+			dbClean := clientClean.Database(tDB.databaseName)
+			if err := dbClean.Drop(ctx); err != nil {
 				tb.Logf("failed to drop database %s: %v", tDB.databaseName, err)
 			}
 		}
