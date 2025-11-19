@@ -53,6 +53,7 @@ func GetMongoDatabaseV2(tb testing.TB, dsn string, opt ...Option) (*mongo.Databa
 				tb.Logf("cannot connect to mongo for cleanup: %v", err)
 				return
 			}
+			defer clientClean.Disconnect(ctx)
 
 			dbClean := clientClean.Database(tDB.databaseName)
 			if err := dbClean.Drop(ctx); err != nil {
