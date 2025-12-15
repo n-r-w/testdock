@@ -15,7 +15,7 @@ require (
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.17.6
-	go.mongodb.org/mongo-driver/v2 v2.4.0
+	go.mongodb.org/mongo-driver/v2 v2.4.1
 )
 
 require (
