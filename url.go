@@ -3,6 +3,7 @@ package testdock
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,7 +19,7 @@ type dbURL struct {
 	Protocol  string
 	Transport string
 	User      string
-	Password  string
+	Password  string //nolint:gosec // for testing purposes
 	Host      string
 	Port      int
 	Database  string
@@ -32,7 +33,14 @@ func parseURL(connStr string) (*dbURL, error) {
 	}
 
 	u := &dbURL{
-		Options: make(map[string]string),
+		Protocol:  "",
+		Transport: "",
+		User:      "",
+		Password:  "",
+		Host:      "",
+		Port:      0,
+		Database:  "",
+		Options:   make(map[string]string),
 	}
 
 	const splitCount = 2
@@ -81,7 +89,7 @@ func parseURL(connStr string) (*dbURL, error) {
 	// Parse query parameters if they exist
 	if len(hostAndQuery) > 1 {
 		queryStr := hostAndQuery[1]
-		for _, param := range strings.Split(queryStr, "&") {
+		for param := range strings.SplitSeq(queryStr, "&") {
 			kv := strings.SplitN(param, "=", splitCount)
 			if len(kv) == splitCount {
 				u.Options[kv[0]] = kv[1]
@@ -168,7 +176,8 @@ func (u *dbURL) string(hidePassword bool) string {
 	}
 	b.WriteString(u.Host)
 	if u.Port != 0 {
-		b.WriteString(":" + strconv.Itoa(u.Port))
+		b.WriteString(":")
+		b.WriteString(strconv.Itoa(u.Port))
 	}
 	if u.Transport != "" {
 		b.WriteString(")")
@@ -176,7 +185,8 @@ func (u *dbURL) string(hidePassword bool) string {
 
 	// Write database if exists
 	if u.Database != "" {
-		b.WriteString("/" + u.Database)
+		b.WriteString("/")
+		b.WriteString(u.Database)
 	}
 
 	// Write options if exist
@@ -221,9 +231,7 @@ func (u *dbURL) clone() *dbURL {
 	}
 
 	// Deep copy the options map
-	for k, v := range u.Options {
-		clone.Options[k] = v
-	}
+	maps.Copy(clone.Options, u.Options)
 
 	return clone
 }

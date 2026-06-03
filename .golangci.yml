@@ -1,89 +1,262 @@
-# More info on config here: https://golangci-lint.run/usage/configuration/#config-file
+version: "2"
 run:
-  timeout: 1m
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-  skip-files:
-
 output:
   formats:
-    - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-
-linters-settings:
-  govet:
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  gocognit:
-    min-complexity: 30
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-      - unlabelStmt
-      - sloppyReassign
-    settings:
-      # don't forget to run "golangci-lint cache clean" after changes in the .go files below
-      ruleguard:
-      hugeParam:
-        sizeThreshold: 512
-      rangeValCopy:
-        sizeThreshold: 512
-
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
 linters:
-  disable-all: true
+  default: none
   enable:
-    # - dupl - it's very slow, enable if you really know why you need it
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - cyclop
+    - dupl
+    - durationcheck
     - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - exhaustruct
+    - forbidigo
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
     - goconst
-    - goimports
+    - gocritic
+    - godot
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
     - gosec
     - govet
     - ineffassign
-    - gosimple # part of former megacheck
-    - staticcheck # part of former megacheck
-    - unused # part of former megacheck
-    - revive
-    - typecheck
-    - gocritic
-    - gocognit
-    - mnd # renamed from gomnd
+    - intrange
+    - lll
+    - loggercheck
+    - makezero
+    - mirror
+    - mnd
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - perfsprint
     - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - revive
+    - sloglint
+    - sqlclosecheck
+    - staticcheck
+    - testableexamples
+    - testifylint
+    - tparallel
+    - unconvert
     - unparam
-    - exhaustive
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+  settings:
+    unused:
+      # Mark all struct fields that have been written to as used.
+      # Default: true
+      field-writes-are-uses: true
+      # Treat IncDec statement (e.g. `i++` or `i--`) as both read and write operation instead of just write.
+      # Default: false
+      post-statements-are-reads: true
+      # Mark all exported fields as used.
+      # default: true
+      exported-fields-are-used: true
+      # Mark all function parameters as used.
+      # default: true
+      parameters-are-used: true
+      # Mark all local variables as used.
+      # default: true
+      local-variables-are-used: true
+      # Mark all identifiers inside generated files as used.
+      # Default: true
+      generated-is-used: true
+    cyclop:
+      max-complexity: 30
+      package-average: 10
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: true
+    exhaustive:
+      check:
+        - switch
+        - map
+    exhaustruct:
+      include: []
+      exclude: []
+      allow-empty: true
+      allow-empty-returns: true
+      allow-empty-declarations: true
+    gocognit:
+      min-complexity: 30
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - wrapperFunc
+        - unlabelStmt
+        - sloppyReassign
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      settings:
+        hugeParam:
+          sizeThreshold: 512
+        rangeValCopy:
+          sizeThreshold: 512
+        ruleguard: {}
+    gomodguard:
+      blocked:
+        modules:
+          - github.com/golang/protobuf:
+              recommendations:
+                - google.golang.org/protobuf
+              reason: see https://developers.google.com/protocol-buffers/docs/reference/go/faq#modules
+          - github.com/satori/go.uuid:
+              recommendations:
+                - github.com/google/uuid
+              reason: satori's package is not maintained
+          - github.com/gofrs/uuid:
+              recommendations:
+                - github.com/gofrs/uuid/v5
+              reason: gofrs' package was not go module before v5
+    govet:
+      disable:
+        - fieldalignment
+        - composites
+      enable-all: true
+      settings:
+        shadow:
+          strict: true
+    inamedparam:
+      skip-single-param: true
+    mnd:
+      ignored-numbers:
+        - "1"
+        - "24" # hours in a day
+        - "60" # minutes in an hour, seconds in a minute
+        - "100" # percentage
+        - "1024" # bytes in a kilobyte
+      ignored-functions:
+        - args.Error
+        - flag.Arg
+        - flag.Duration.*
+        - flag.Float.*
+        - flag.Int.*
+        - flag.Uint.*
+        - os.Chmod
+        - os.Mkdir.*
+        - os.OpenFile
+        - os.WriteFile
+        - prometheus.ExponentialBuckets.*
+        - prometheus.LinearBuckets
+    nakedret:
+      max-func-lines: 0
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-no-explanation:
+        - funlen
+        - gocognit
+        - lll
+    perfsprint:
+      strconcat: false
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: package-comments
+          disabled: true
+        - name: line-length-limit
+          disabled: true
+        - name: add-constant
+          disabled: true
+        - name: cognitive-complexity
+          disabled: true
+        - name: cyclomatic
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: argument-limit
+          disabled: true
+        - name: flag-parameter
+          disabled: true
+        - name: max-public-structs
+          disabled: true
+        - name: var-naming
+          # revive var-naming accepts ONLY two slices (allowlist & blocklist) of initialisms.
+          # We keep default behavior here (no custom initialisms).
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - dupl
+          - errcheck
+          - gochecknoglobals
+          - gocognit
+          - goconst
+          - gocritic
+          - godot
+          - gosec
+          - govet
+          - lll
+          - prealloc
+          - protogetter
+          - revive
+          - staticcheck
+          - unparam
+          - whitespace
+        path: _test\.go
+      - linters:
+          - revive
+        text: "(var-naming: )?avoid meaningless package names"
+        source: "^package\\s+"
+    paths:
+      - third_party$
+      - builtin$
 
 issues:
-  exclude-use-default: false
-  exclude:
-    # _ instead of err checks
-    - G104
-    # for "public interface + private struct implementation" cases only!
-    - exported func .* returns unexported type .*, which can be annoying to use
-    # can be removed in the development phase
-    # - (comment on exported (method|function|type|const)|should have( a package)? comment|comment should be of the form)
-    # not for the active development - can be removed in the stable phase
-    - should have a package comment
-    - don't use an underscore in package name
-    # EXC0001 errcheck: Almost all programs ignore errors on these functions and in most cases it's ok
-    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*print(f|ln)?|os\.(Un)?Setenv). is not checked
-    - should check returned error before deferring
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocognit
-        - gocritic
-        - unparam
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - loadtest$
+      - profile$
+      - bench$

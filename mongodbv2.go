@@ -9,10 +9,12 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// mongo driver name for separating sql and mongo
+// mongo driver name for separating sql and mongo.
 const mongoDriverName = "mongodb"
 
 // GetMongoDatabaseV2 initializes a test MongoDB database, applies migrations, and returns a database connection.
+//
+//nolint:dupl // similar code, but with different drivers and options.
 func GetMongoDatabaseV2(tb testing.TB, dsn string, opt ...Option) (*mongo.Database, Informer) {
 	tb.Helper()
 
@@ -48,16 +50,20 @@ func GetMongoDatabaseV2(tb testing.TB, dsn string, opt ...Option) (*mongo.Databa
 	tb.Cleanup(func() {
 		if tDB.mode != RunModeDocker {
 			// protect against closing connection during tests
-			clientClean, err := tDB.connectMongoDBv2(ctx)
-			if err != nil {
-				tb.Logf("cannot connect to mongo for cleanup: %v", err)
+			clientClean, connectErr := tDB.connectMongoDBv2(ctx)
+			if connectErr != nil {
+				tb.Logf("cannot connect to mongo for cleanup: %v", connectErr)
 				return
 			}
-			defer clientClean.Disconnect(ctx)
+			defer func() {
+				if disconnectErr := clientClean.Disconnect(ctx); disconnectErr != nil {
+					tb.Logf("cannot disconnect mongo cleanup client: %v", disconnectErr)
+				}
+			}()
 
 			dbClean := clientClean.Database(tDB.databaseName)
-			if err := dbClean.Drop(ctx); err != nil {
-				tb.Logf("failed to drop database %s: %v", tDB.databaseName, err)
+			if dropErr := dbClean.Drop(ctx); dropErr != nil {
+				tb.Logf("failed to drop database %s: %v", tDB.databaseName, dropErr)
 			}
 		}
 
@@ -67,7 +73,7 @@ func GetMongoDatabaseV2(tb testing.TB, dsn string, opt ...Option) (*mongo.Databa
 	return client.Database(tDB.databaseName), tDB
 }
 
-// connectMongoDBv2 connects to MongoDB with retries
+// connectMongoDBv2 connects to MongoDB with retries.
 func (d *testDB) connectMongoDBv2(ctx context.Context) (*mongo.Client, error) {
 	var (
 		client *mongo.Client

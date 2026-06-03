@@ -5,10 +5,10 @@ name: Go
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:    
+    branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,7 +16,7 @@ jobs:
 
     services:
       postgres_srv:
-        image: postgres:17.2          
+        image: postgres:17.2
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: secret
@@ -31,29 +31,29 @@ jobs:
           --health-retries 5
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.23'
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
 
-    - name: Build
-      run: go build -v ./...
+      - name: Build
+        run: go build -v ./...
 
-    - name: Test
-      env:
-        TESTDOCK_DSN_POSTGRES: postgres://postgres:secret@localhost:5432/postgres?sslmode=disable
-      run: go test -race -v ./...
+      - name: Test
+        env:
+          TESTDOCK_DSN_POSTGRES: postgres://postgres:secret@localhost:5432/postgres?sslmode=disable
+        run: go test -race -v ./...
 
-    - name: Update coverage report
-      uses: ncruces/go-coverage-report@494b2847891f4dd3b10f6704ca533367dbb7493d
-      with:
-        report: true
-        chart: true
-        amend: true
-      continue-on-error: true
-    
-    - name: Update goreportcard
-      uses: creekorful/goreportcard-action@v1.0
-      continue-on-error: true
+      - name: Update coverage report
+        uses: ncruces/go-coverage-report@dfc237255099f2d25066babde51253992175e365
+        with:
+          report: true
+          chart: true
+          amend: true
+        continue-on-error: true
+
+      - name: Update goreportcard
+        uses: creekorful/goreportcard-action@v1.0
+        continue-on-error: true

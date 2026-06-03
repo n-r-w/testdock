@@ -11,6 +11,7 @@ import (
 	"github.com/n-r-w/ctxlog"
 )
 
+//nolint:gosec // we use hardcoded credentials for testing purposes, which is not a security issue.
 const (
 	// DefaultMongoDSN - default mongodb connection string.
 	DefaultMongoDSN = "mongodb://testuser:secret@127.0.0.1:27017/testdb?authSource=admin"
@@ -24,11 +25,11 @@ const (
 type RunMode int
 
 const (
-	// RunModeUnknown - unknown run mode
+	// RunModeUnknown - unknown run mode.
 	RunModeUnknown RunMode = 0
-	// RunModeDocker - run the tests in docker
+	// RunModeDocker - run the tests in docker.
 	RunModeDocker RunMode = 1
-	// RunModeExternal - run the tests in external database
+	// RunModeExternal - run the tests in external database.
 	RunModeExternal RunMode = 2
 	// RunModeAuto - checks the environment variable TESTDOCK_DSN_[DRIVER]. If it is set,
 	// then RunModeExternal, otherwise RunModeDocker.
@@ -109,7 +110,21 @@ func WithLogger(logger ctxlog.ILogger) Option {
 func WithMigrations(migrationsDir string, migrateFactory MigrateFactory) Option {
 	return func(o *testDB) {
 		o.migrationsDir = migrationsDir
-		o.MigrateFactory = migrateFactory
+		o.migrateFactory = migrateFactory
+		o.hasMigrationTargetVersion = false
+		o.migrationTargetVersion = 0
+	}
+}
+
+// WithMigrationsToVersion applies migrations up to and including the target version.
+// The version is the numeric file prefix before "_", including timestamp prefixes.
+// Custom factories must return a migrator that implements VersionedMigrator.
+func WithMigrationsToVersion(migrationsDir string, migrateFactory MigrateFactory, version int64) Option {
+	return func(o *testDB) {
+		o.migrationsDir = migrationsDir
+		o.migrateFactory = migrateFactory
+		o.hasMigrationTargetVersion = true
+		o.migrationTargetVersion = version
 	}
 }
 
@@ -187,25 +202,44 @@ func (d *testDB) prepareOptions(driver string, options []Option) error {
 	}
 
 	if d.mode == RunModeDocker {
-		if d.dockerRepository == "" {
-			return errors.New("dockerRepository is empty")
-		}
-		if d.dockerImage == "" {
-			d.dockerImage = "latest"
-		}
-		if d.dockerPort <= 0 {
-			d.dockerPort = p.Port
-			if d.dockerPort <= 0 {
-				return errors.New("dockerPort must be greater than 0")
-			}
+		if err = d.prepareDockerOptions(p); err != nil {
+			return err
 		}
 	}
 
 	dbName := fmt.Sprintf("t_%s_%s", time.Now().Format("2006_0102_1504_05"), uuid.New().String())
 	d.databaseName = strings.ReplaceAll(dbName, "-", "")
 
-	if (d.MigrateFactory == nil) != (d.migrationsDir == "") {
+	if (d.migrateFactory == nil) != (d.migrationsDir == "") {
 		return errors.New("MigrateFactory and migrationsDir must be set together")
+	}
+	if d.hasMigrationTargetVersion && d.migrationsDir == "" {
+		return errors.New("migration target version requires migrationsDir and MigrateFactory")
+	}
+	if d.hasMigrationTargetVersion {
+		if err = validateMigrationVersion(d.migrationTargetVersion); err != nil {
+			return fmt.Errorf("migration target version: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// prepareDockerOptions validates and fills Docker-specific options.
+func (d *testDB) prepareDockerOptions(p *dbURL) error {
+	if d.dockerRepository == "" {
+		return errors.New("dockerRepository is empty")
+	}
+	if d.dockerImage == "" {
+		d.dockerImage = "latest"
+	}
+	if d.dockerPort > 0 {
+		return nil
+	}
+
+	d.dockerPort = p.Port
+	if d.dockerPort <= 0 {
+		return errors.New("dockerPort must be greater than 0")
 	}
 
 	return nil

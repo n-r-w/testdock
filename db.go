@@ -46,17 +46,19 @@ type testDB struct {
 	dsnNoPass    string // database connection string without password
 
 	// options
-	driver                  string           // database driver (pgx, pq, etc)
-	mode                    RunMode          // run mode (docker or external)
-	dsn                     string           // database connection string
-	retryTimeout            time.Duration    // retry timeout for connecting to the database
-	totalRetryDuration      time.Duration    // total retry duration
-	migrationsDir           string           // migrations directory
-	unsetProxyEnv           bool             // unset HTTP_PROXY, HTTPS_PROXY etc. environment variables
-	MigrateFactory          MigrateFactory   // unified way to create a migrations
-	prepareCleanUp          []PrepareCleanUp // function for prepare to delete temporary test database.
-	connectDatabase         string           // database name for connecting to the database server
-	connectDatabaseOverride bool
+	driver                    string           // database driver (pgx, pq, etc)
+	mode                      RunMode          // run mode (docker or external)
+	dsn                       string           // database connection string
+	retryTimeout              time.Duration    // retry timeout for connecting to the database
+	totalRetryDuration        time.Duration    // total retry duration
+	migrationsDir             string           // migrations directory
+	migrationTargetVersion    int64            // numeric migration file prefix where automatic migration must stop
+	hasMigrationTargetVersion bool             // enables migration up to migrationTargetVersion instead of all migrations
+	unsetProxyEnv             bool             // unset HTTP_PROXY, HTTPS_PROXY etc. environment variables
+	migrateFactory            MigrateFactory   // unified way to create migrations
+	prepareCleanUp            []PrepareCleanUp // function for prepare to delete temporary test database.
+	connectDatabase           string           // database name for connecting to the database server
+	connectDatabaseOverride   bool
 
 	dockerPort           int      // docker port
 	dockerRepository     string   // docker hub repository
@@ -65,6 +67,7 @@ type testDB struct {
 	dockerEnv            []string // environment variables for the docker container
 }
 
+//nolint:gochecknoglobals // used to synchronize access to the same database connection string across tests.
 var (
 	globalMu      sync.Mutex
 	globalMuByDSN = make(map[string]*sync.Mutex)
@@ -76,13 +79,29 @@ func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option
 
 	var (
 		db = &testDB{
-			t:                  tb,
-			logger:             ctxlog.Must(ctxlog.WithTesting(tb)),
-			driver:             driver,
-			dsn:                dsn,
-			mode:               RunModeAuto,
-			retryTimeout:       DefaultRetryTimeout,
-			totalRetryDuration: DefaultTotalRetryDuration,
+			t:                         tb,
+			logger:                    ctxlog.Must(ctxlog.WithTesting(tb)),
+			databaseName:              "",
+			url:                       nil,
+			dsnNoPass:                 "",
+			driver:                    driver,
+			mode:                      RunModeAuto,
+			dsn:                       dsn,
+			retryTimeout:              DefaultRetryTimeout,
+			totalRetryDuration:        DefaultTotalRetryDuration,
+			migrationsDir:             "",
+			migrationTargetVersion:    0,
+			hasMigrationTargetVersion: false,
+			unsetProxyEnv:             false,
+			migrateFactory:            nil,
+			prepareCleanUp:            nil,
+			connectDatabase:           "",
+			connectDatabaseOverride:   false,
+			dockerPort:                0,
+			dockerRepository:          "",
+			dockerImage:               "",
+			dockerSocketEndpoint:      "",
+			dockerEnv:                 nil,
 		}
 		errResult error
 	)
@@ -131,11 +150,11 @@ func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option
 	}
 
 	tb.Cleanup(func() {
-		ctx := context.Background()
-		if err := db.close(ctx); err != nil {
-			db.logger.Info(ctx, "failed to close test database", "dsn", db.dsnNoPass, "error", err)
+		cleanupCtx := context.Background()
+		if closeErr := db.close(cleanupCtx); closeErr != nil {
+			db.logger.Info(cleanupCtx, "failed to close test database", "dsn", db.dsnNoPass, "error", closeErr)
 		} else {
-			db.logger.Info(ctx, "test database closed", "dsn", db.dsnNoPass)
+			db.logger.Info(cleanupCtx, "test database closed", "dsn", db.dsnNoPass)
 		}
 	})
 
@@ -149,12 +168,19 @@ func (d *testDB) migrationsUp(ctx context.Context) error {
 
 	dsn := d.url.replaceDatabase(d.databaseName).string(false)
 
-	migrator, err := d.MigrateFactory(d.t, dsn, d.migrationsDir, d.logger)
+	migrator, err := d.migrateFactory(d.t, dsn, d.migrationsDir, d.logger)
 	if err != nil {
 		return fmt.Errorf("new migrator: %w", err)
 	}
 
-	if err = migrator.Up(context.Background()); err != nil {
+	if d.hasMigrationTargetVersion {
+		if err = migrateUpToVersion(ctx, migrator, d.migrationTargetVersion); err != nil {
+			return fmt.Errorf("up migrations to version: %w", err)
+		}
+		return nil
+	}
+
+	if err = migrator.Up(ctx); err != nil {
 		return fmt.Errorf("up migrations: %w", err)
 	}
 
@@ -181,12 +207,12 @@ func (d *testDB) close(ctx context.Context) error {
 		}()
 
 		for _, prepareCleanUp := range d.prepareCleanUp {
-			if err := prepareCleanUp(db, d.databaseName); err != nil {
-				d.logger.Info(ctx, "failed to prepare clean up", "dsn", d.dsnNoPass, "error", err)
+			if prepareErr := prepareCleanUp(db, d.databaseName); prepareErr != nil {
+				d.logger.Info(ctx, "failed to prepare clean up", "dsn", d.dsnNoPass, "error", prepareErr)
 			}
 		}
 
-		if _, err = db.Exec(fmt.Sprintf("DROP DATABASE %s", d.databaseName)); err != nil {
+		if _, err = db.ExecContext(ctx, fmt.Sprintf("DROP DATABASE %s", d.databaseName)); err != nil {
 			return fmt.Errorf("drop db: %w", err)
 		}
 
