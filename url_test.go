@@ -19,70 +19,91 @@ func TestURL_Parse(t *testing.T) {
 		{
 			name:    "empty string",
 			connStr: "",
+			want:    nil,
 			wantErr: "connection string cannot be empty",
 		},
 		{
 			name:    "invalid format - :// exists, but no protocol",
 			connStr: "://postgresuser:pass@localhost",
+			want:    nil,
 			wantErr: "invalid connection string format: '://' exists, but no protocol",
 		},
 		{
 			name:    "invalid format - missing password",
 			connStr: "postgres://user@localhost",
+			want:    nil,
 			wantErr: "invalid connection string format: missing password",
 		},
 		{
 			name:    "missing user",
 			connStr: "postgres://:pass@localhost",
+			want:    nil,
 			wantErr: "user is required",
 		},
 		{
 			name:    "missing password",
 			connStr: "postgres://user:@localhost",
+			want:    nil,
 			wantErr: "password is required",
 		},
 		{
 			name:    "missing host",
 			connStr: "postgres://user:pass@",
+			want:    nil,
 			wantErr: "host is required",
 		},
 		{
 			name:    "missing port",
 			connStr: "postgres://user:pass@localhost:",
+			want:    nil,
 			wantErr: "port is required",
 		},
 		{
 			name:    "minimal valid URL",
 			connStr: "localhost:5432",
 			want: &dbURL{
-				Host:    "localhost",
-				Port:    5432,
-				Options: make(map[string]string),
+				Protocol:  "",
+				Transport: "",
+				User:      "",
+				Password:  "",
+				Host:      "localhost",
+				Port:      5432,
+				Database:  "",
+				Options:   make(map[string]string),
 			},
+			wantErr: "",
 		},
 		{
 			name:    "minimal valid URL with user and password",
 			connStr: "user:pass@localhost:5432",
 			want: &dbURL{
-				User:     "user",
-				Password: "pass",
-				Host:     "localhost",
-				Port:     5432,
-				Options:  make(map[string]string),
+				Protocol:  "",
+				Transport: "",
+				User:      "user",
+				Password:  "pass",
+				Host:      "localhost",
+				Port:      5432,
+				Database:  "",
+				Options:   make(map[string]string),
 			},
+			wantErr: "",
 		},
 		{
 			name:    "no user and password",
 			connStr: "mongodb://localhost:27017/testdb?directConnection=true",
 			want: &dbURL{
-				Protocol: "mongodb",
-				Host:     "localhost",
-				Port:     27017,
-				Database: "testdb",
+				Protocol:  "mongodb",
+				Transport: "",
+				User:      "",
+				Password:  "",
+				Host:      "localhost",
+				Port:      27017,
+				Database:  "testdb",
 				Options: map[string]string{
 					"directConnection": "true",
 				},
 			},
+			wantErr: "",
 		},
 		{
 			name:    "full URL with all optional fields",
@@ -100,24 +121,29 @@ func TestURL_Parse(t *testing.T) {
 					"opt2":    "val2",
 				},
 			},
+			wantErr: "",
 		},
 		{
 			name:    "URL with special characters in password",
 			connStr: `postgres://user:p@ss/\:!w0rd@localhost:5432/mydb`,
 			want: &dbURL{
-				Protocol: "postgres",
-				User:     "user",
-				Password: `p@ss/\:!w0rd`,
-				Host:     "localhost",
-				Port:     5432,
-				Database: "mydb",
-				Options:  make(map[string]string),
+				Protocol:  "postgres",
+				Transport: "",
+				User:      "user",
+				Password:  `p@ss/\:!w0rd`,
+				Host:      "localhost",
+				Port:      5432,
+				Database:  "mydb",
+				Options:   make(map[string]string),
 			},
+			wantErr: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, err := parseURL(tt.connStr)
 			if tt.wantErr != "" {
 				require.Error(t, err)
@@ -146,12 +172,14 @@ func TestURL_String(t *testing.T) {
 		{
 			name: "minimal URL",
 			url: &dbURL{
-				Protocol: "postgres",
-				User:     "user",
-				Password: "pass",
-				Host:     "localhost",
-				Port:     5432,
-				Options:  make(map[string]string),
+				Protocol:  "postgres",
+				Transport: "",
+				User:      "user",
+				Password:  "pass",
+				Host:      "localhost",
+				Port:      5432,
+				Database:  "",
+				Options:   make(map[string]string),
 			},
 			want: "postgres://user:pass@localhost:5432",
 		},
@@ -176,6 +204,8 @@ func TestURL_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := tt.url.string(false)
 			assert.Equal(t, tt.want, got)
 		})
@@ -196,7 +226,14 @@ func TestURL_Clone(t *testing.T) {
 		{
 			name: "empty URL",
 			url: &dbURL{
-				Options: make(map[string]string),
+				Protocol:  "",
+				Transport: "",
+				User:      "",
+				Password:  "",
+				Host:      "",
+				Port:      0,
+				Database:  "",
+				Options:   make(map[string]string),
 			},
 		},
 		{
@@ -219,6 +256,8 @@ func TestURL_Clone(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			clone := tt.url.clone()
 
 			if tt.url == nil {
@@ -226,21 +265,20 @@ func TestURL_Clone(t *testing.T) {
 				return
 			}
 
-			// Check that all fields are equal
 			assert.Equal(t, tt.url, clone)
-
-			// Check that it's a different pointer
-			assert.False(t, tt.url == clone, "Clone should return a new pointer")
-
-			// Verify deep copy of Options map
+			assert.NotSame(t, tt.url, clone, "Clone should return a new pointer")
 			assert.Equal(t, tt.url.Options, clone.Options)
 
-			// Modify clone's Options to verify it doesn't affect original
 			if len(clone.Options) > 0 {
 				origValue := tt.url.Options["sslmode"]
 				clone.Options["sslmode"] = "modified"
 				assert.Equal(t, origValue, tt.url.Options["sslmode"], "Modifying clone's Options should not affect original")
-				assert.NotEqual(t, tt.url.Options["sslmode"], clone.Options["sslmode"], "Clone's Options should be modifiable independently")
+				assert.NotEqual(
+					t,
+					tt.url.Options["sslmode"],
+					clone.Options["sslmode"],
+					"Clone's Options should be modifiable independently",
+				)
 			}
 		})
 	}
@@ -259,6 +297,8 @@ func TestParse_RoundTrip(t *testing.T) {
 
 	for _, url := range tests {
 		t.Run(url, func(t *testing.T) {
+			t.Parallel()
+
 			parsed, err := parseURL(url)
 			require.NoError(t, err)
 

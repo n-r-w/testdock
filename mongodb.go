@@ -10,6 +10,8 @@ import (
 )
 
 // GetMongoDatabase initializes a test MongoDB database, applies migrations, and returns a database connection.
+//
+//nolint:dupl // similar code, but with different drivers and options.
 func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongov1.Database, Informer) {
 	tb.Helper()
 
@@ -45,16 +47,20 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongov1.Databa
 	tb.Cleanup(func() {
 		if tDB.mode != RunModeDocker {
 			// protect against closing connection during tests
-			clientClean, err := tDB.connectMongoDB(ctx)
-			if err != nil {
-				tb.Logf("cannot connect to mongo for cleanup: %v", err)
+			clientClean, connectErr := tDB.connectMongoDB(ctx)
+			if connectErr != nil {
+				tb.Logf("cannot connect to mongo for cleanup: %v", connectErr)
 				return
 			}
-			defer clientClean.Disconnect(ctx)
+			defer func() {
+				if disconnectErr := clientClean.Disconnect(ctx); disconnectErr != nil {
+					tb.Logf("cannot disconnect mongo cleanup client: %v", disconnectErr)
+				}
+			}()
 
 			dbClean := clientClean.Database(tDB.databaseName)
-			if err := dbClean.Drop(ctx); err != nil {
-				tb.Logf("failed to drop database %s: %v", tDB.databaseName, err)
+			if dropErr := dbClean.Drop(ctx); dropErr != nil {
+				tb.Logf("failed to drop database %s: %v", tDB.databaseName, dropErr)
 			}
 		}
 
@@ -64,7 +70,7 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongov1.Databa
 	return client.Database(tDB.databaseName), tDB
 }
 
-// connectMongoDB connects to MongoDB with retries
+// connectMongoDB connects to MongoDB with retries.
 func (d *testDB) connectMongoDB(ctx context.Context) (*mongov1.Client, error) {
 	var (
 		client *mongov1.Client

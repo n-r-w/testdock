@@ -44,7 +44,7 @@ func (d *testDB) connectSQLDB(ctx context.Context, testDatabase bool) (*sql.DB, 
 		if err != nil {
 			return err
 		}
-		if err = db.Ping(); err != nil {
+		if err = db.PingContext(ctx); err != nil {
 			_ = db.Close()
 			return err
 		}
@@ -64,9 +64,9 @@ func (d *testDB) createSQLDatabase(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck // Close only releases setup connection; keep ExecContext result.
 
-	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE %s", d.databaseName))
+	_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", d.databaseName))
 	if err != nil {
 		return fmt.Errorf("create db: %w", err)
 	}

@@ -13,7 +13,7 @@ func Test_MySQLDB(t *testing.T) {
 		DefaultMySQLDSN,
 		WithMigrations("migrations/pg/goose", GooseMigrateFactoryMySQL),
 		WithRetryTimeout(time.Second*5),
-		WithTotalRetryDuration(time.Second*60), //nolint:mnd // for Docker 30s not enough
+		WithTotalRetryDuration(time.Second*60),
 	)
 
 	checkInformer(t, DefaultMySQLDSN, informer)
@@ -24,16 +24,17 @@ func Test_MySQLDB(t *testing.T) {
 func testSQLHelper(t *testing.T, db *sql.DB) {
 	t.Helper()
 
-	rows, err := db.Query("SELECT name FROM test_table")
+	rows, err := db.QueryContext(t.Context(), "SELECT name FROM test_table")
 	if err != nil {
 		t.Fatalf("error: %s", err)
 	}
+	t.Cleanup(func() { _ = rows.Close() })
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			t.Fatalf("error: %s", err)
 		}
-		if name != "test" { //nolint:goconst // ok
+		if name != "test" {
 			t.Fatalf("expected 'test', got '%s'", name)
 		}
 	}

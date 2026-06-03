@@ -72,9 +72,9 @@ func (d *testDB) connectPgxDB(ctx context.Context) (*pgxpool.Pool, error) {
 	return db, nil
 }
 
-// disconnect users before deleting the database
+// disconnectUsers disconnects users before deleting the database.
 func disconnectUsers(db *sql.DB, databaseName string) error {
-	_, err := db.Exec(
+	_, err := db.ExecContext(context.Background(),
 		`SELECT pg_terminate_backend(pg_stat_activity.pid) 
 				FROM pg_stat_activity 
 				WHERE datname = $1 AND pid <> pg_backend_pid()`,
