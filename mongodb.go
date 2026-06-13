@@ -64,7 +64,9 @@ func GetMongoDatabase(tb testing.TB, dsn string, opt ...Option) (*mongov1.Databa
 			}
 		}
 
-		_ = client.Disconnect(context.Background())
+		if closeErr := disconnectWithTimeout(tDB.closeTimeout, client.Disconnect); closeErr != nil {
+			tb.Errorf("%v\n%s", closeErr, tDB.closeTimeoutDetails("mongo client", nil))
+		}
 	})
 
 	return client.Database(tDB.databaseName), tDB

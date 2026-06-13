@@ -21,7 +21,13 @@ func GetSQLConn(tb testing.TB, driver, dsn string, opt ...Option) (*sql.DB, Info
 		tb.Fatalf("cannot connect to database: %v", err)
 	}
 
-	tb.Cleanup(func() { _ = db.Close() })
+	tb.Cleanup(func() {
+		if closeErr := closeResourceWithTimeout(tDB.closeTimeout, db.Close, func() string {
+			return tDB.closeTimeoutDetails("sql connection", nil)
+		}); closeErr != nil {
+			tb.Errorf("%v", closeErr)
+		}
+	})
 
 	return db, tDB
 }

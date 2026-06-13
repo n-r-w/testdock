@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -19,7 +19,7 @@ type dbURL struct {
 	Protocol  string
 	Transport string
 	User      string
-	Password  string //nolint:gosec // for testing purposes
+	Password  string
 	Host      string
 	Port      int
 	Database  string
@@ -150,63 +150,66 @@ func (u *dbURL) string(hidePassword bool) string {
 	}
 
 	var b strings.Builder
+	writeString := func(s string) {
+		_, _ = b.WriteString(s)
+	}
 
 	// Write protocol
 	if u.Protocol != "" {
-		b.WriteString(u.Protocol)
-		b.WriteString("://")
+		writeString(u.Protocol)
+		writeString("://")
 	}
 
 	if u.User != "" {
 		// Write credentials
-		b.WriteString(u.User)
-		b.WriteString(":")
+		writeString(u.User)
+		writeString(":")
 		if hidePassword {
-			b.WriteString("*****")
+			writeString("*****")
 		} else {
-			b.WriteString(u.Password)
+			writeString(u.Password)
 		}
-		b.WriteString("@")
+		writeString("@")
 	}
 
 	// Write transport, host and port
 	if u.Transport != "" {
-		b.WriteString(u.Transport)
-		b.WriteString("(")
+		writeString(u.Transport)
+		writeString("(")
 	}
-	b.WriteString(u.Host)
+	writeString(u.Host)
 	if u.Port != 0 {
-		b.WriteString(":")
-		b.WriteString(strconv.Itoa(u.Port))
+		writeString(":")
+		writeString(strconv.Itoa(u.Port))
 	}
 	if u.Transport != "" {
-		b.WriteString(")")
+		writeString(")")
 	}
 
 	// Write database if exists
 	if u.Database != "" {
-		b.WriteString("/")
-		b.WriteString(u.Database)
+		writeString("/")
+		writeString(u.Database)
 	}
 
 	// Write options if exist
 	if len(u.Options) > 0 {
-		b.WriteString("?")
+		writeString("?")
 
 		// Sort keys for deterministic output
 		keys := make([]string, 0, len(u.Options))
 		for k := range u.Options {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 
 		for i, k := range keys {
 			if i > 0 {
-				b.WriteString("&")
+				writeString("&")
 			}
-			b.WriteString(k)
-			b.WriteString("=")
-			b.WriteString(u.Options[k])
+			writeString(k)
+			writeString("=")
+			writeString(u.Options[k])
 		}
 	}
 

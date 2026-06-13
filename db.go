@@ -29,6 +29,8 @@ const (
 	DefaultRetryTimeout = time.Second * 3
 	// DefaultTotalRetryDuration is the default total retry duration.
 	DefaultTotalRetryDuration = time.Second * 30
+	// defaultCloseTimeout is the default timeout for closing returned resources during cleanup.
+	defaultCloseTimeout = time.Second * 30
 )
 
 // PrepareCleanUp - function for prepare to delete temporary test database.
@@ -51,6 +53,7 @@ type testDB struct {
 	dsn                       string           // database connection string
 	retryTimeout              time.Duration    // retry timeout for connecting to the database
 	totalRetryDuration        time.Duration    // total retry duration
+	closeTimeout              time.Duration    // timeout for closing returned resources during cleanup
 	migrationsDir             string           // migrations directory
 	migrationTargetVersion    int64            // numeric migration file prefix where automatic migration must stop
 	hasMigrationTargetVersion bool             // enables migration up to migrationTargetVersion instead of all migrations
@@ -89,6 +92,7 @@ func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option
 			dsn:                       dsn,
 			retryTimeout:              DefaultRetryTimeout,
 			totalRetryDuration:        DefaultTotalRetryDuration,
+			closeTimeout:              defaultCloseTimeout,
 			migrationsDir:             "",
 			migrationTargetVersion:    0,
 			hasMigrationTargetVersion: false,
