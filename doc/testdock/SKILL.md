@@ -20,6 +20,7 @@ description: Guidelines for using `github.com/n-r-w/testdock/v2` package.
         13. Use GooseMigrateFactoryPGX, GooseMigrateFactoryPQ, GooseMigrateFactoryMySQL, GolangMigrateFactory, or a custom MigrateFactory.
         14. Use WithDockerRepository, WithDockerImage, WithDockerPort, WithDockerSocketEndpoint, WithDockerEnv, and WithUnsetProxyEnv only when default Docker settings are not enough.
         15. Use WithRetryTimeout and WithTotalRetryDuration only for slow startup; retry timeout must be less than total retry duration.
+        16. Use WithCloseTimeout only for slow cleanup; close timeout must be greater than 0.
     </instructions>
     <examples>
         ```go

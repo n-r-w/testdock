@@ -26,7 +26,16 @@ func GetPgxPool(tb testing.TB, dsn string, opt ...Option) (*pgxpool.Pool, Inform
 		tb.Fatalf("cannot connect to postgres: %v", err)
 	}
 
-	tb.Cleanup(func() { db.Close() })
+	tb.Cleanup(func() {
+		if closeErr := closeResourceWithTimeout(tDB.closeTimeout, func() error {
+			db.Close()
+			return nil
+		}, func() string {
+			return tDB.closeTimeoutDetails("pgxpool", snapshotPgxPoolStats(db))
+		}); closeErr != nil {
+			tb.Errorf("%v", closeErr)
+		}
+	})
 
 	return db, tDB
 }
@@ -43,9 +52,27 @@ func GetPqConn(ctx context.Context, tb testing.TB, dsn string, opt ...Option) (*
 		tb.Fatalf("cannot connect to postgres: %v", err)
 	}
 
-	tb.Cleanup(func() { _ = db.Close() })
+	tb.Cleanup(func() {
+		if closeErr := closeResourceWithTimeout(tDB.closeTimeout, db.Close, func() string {
+			return tDB.closeTimeoutDetails("postgres sql connection", nil)
+		}); closeErr != nil {
+			tb.Errorf("%v", closeErr)
+		}
+	})
 
 	return db, tDB
+}
+
+// snapshotPgxPoolStats captures the pgxpool counters required for close-timeout diagnostics.
+func snapshotPgxPoolStats(pool *pgxpool.Pool) *pgxPoolCloseStats {
+	stats := pool.Stat()
+	return &pgxPoolCloseStats{
+		AcquiredConns:     stats.AcquiredConns(),
+		IdleConns:         stats.IdleConns(),
+		TotalConns:        stats.TotalConns(),
+		ConstructingConns: stats.ConstructingConns(),
+		MaxConns:          stats.MaxConns(),
+	}
 }
 
 // connectPgxDB connects to the database with retries using pgx.

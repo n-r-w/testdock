@@ -138,12 +138,15 @@ func TestMongoDB(t *testing.T) {
 
 - `WithRetryTimeout(duration)`: Configure connection retry timeout (default 3s). Must be less than totalRetryDuration
 - `WithTotalRetryDuration(duration)`: Configure total retry duration (default 30s). Must be greater than retryTimeout
+- `WithCloseTimeout(duration)`: Configure cleanup timeout for closing returned resources (default 30s). Must be greater than 0. It covers `pgxpool.Pool.Close`, `sql.DB.Close`, and `mongo.Client.Disconnect`. It does not cover SQL `DROP DATABASE`, MongoDB `Drop`, or Docker cleanup.
 
 ### Docker Configuration
 
 - `WithDockerSocketEndpoint(endpoint)`: Custom Docker daemon socket
 - `WithDockerPort(port)`: Override container port mapping
 - `WithUnsetProxyEnv(bool)`: Unset proxy environment variables
+
+If close timeout is reached, the test fails and later cleanup functions continue. A timeout usually means the test leaked a connection: `Rows` was not closed, `QueryRow` was used without `Scan`, or a transaction was not finished.
 
 ### Database Options
 

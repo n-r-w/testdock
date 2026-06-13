@@ -98,6 +98,16 @@ func WithTotalRetryDuration(totalRetryDuration time.Duration) Option {
 	}
 }
 
+// WithCloseTimeout sets the timeout for closing returned resources during cleanup.
+// The default is 30 seconds. The timeout must be greater than 0.
+// The timeout covers pgxpool.Pool.Close, sql.DB.Close, and mongo.Client.Disconnect.
+// It does not cover SQL DROP DATABASE, MongoDB Drop, or Docker cleanup.
+func WithCloseTimeout(closeTimeout time.Duration) Option {
+	return func(o *testDB) {
+		o.closeTimeout = closeTimeout
+	}
+}
+
 // WithLogger sets the logger for the test database.
 // The default is logger from testing.TB.
 func WithLogger(logger ctxlog.ILogger) Option {
@@ -170,6 +180,9 @@ func (d *testDB) prepareOptions(driver string, options []Option) error {
 
 	if d.totalRetryDuration <= d.retryTimeout {
 		return errors.New("totalRetryDuration must be greater than retryTimeout")
+	}
+	if d.closeTimeout <= 0 {
+		return errors.New("closeTimeout must be greater than 0")
 	}
 
 	if d.driver == "" {

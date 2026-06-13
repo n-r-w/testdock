@@ -27,6 +27,7 @@ func TestWithMigrationsToVersionRejectsInvalidVersion(t *testing.T) {
 		dsn:                       DefaultPostgresDSN,
 		retryTimeout:              DefaultRetryTimeout,
 		totalRetryDuration:        DefaultTotalRetryDuration,
+		closeTimeout:              defaultCloseTimeout,
 		migrationsDir:             "",
 		migrationTargetVersion:    0,
 		hasMigrationTargetVersion: false,
