@@ -1,6 +1,8 @@
 ---
 name: testdock
 description: Guidelines for using `github.com/n-r-w/testdock/v2` package.
+metadata:
+  version: "1.0"
 ---
 
 <testdock name="github.com/n-r-w/testdock/v2 guidelines">
@@ -8,7 +10,7 @@ description: Guidelines for using `github.com/n-r-w/testdock/v2` package.
         1. Use GetPgxPool, GetPqConn, GetMySQLConn, GetSQLConn, GetMongoDatabase, or GetMongoDatabaseV2 according to the database driver.
         2. Each Get... call creates a separate independent temporary database with a unique name.
         3. It is safe to call Get... from t.Parallel() tests; separate databases prevent database state conflicts between tests.
-        4. Do not add manual cleanup for resources returned by Get...; testdock registers tb.Cleanup for database cleanup and connection closing.
+        4. Do not add manual cleanup for resources returned by Get...; testdock registers tb.Cleanup for database cleanup and connection closing. Down migrations are NOT REQUIRED - testdock automatically drops the temporary database after test completion.
         5. Use the returned Informer when the test needs the real DSN, Host, Port, or DatabaseName.
         6. RunModeAuto is the default: TESTDOCK_DSN_<DRIVER_NAME> selects an external database; otherwise testdock starts Docker.
         7. Use WithMode only when the test must force RunModeDocker or RunModeExternal.
