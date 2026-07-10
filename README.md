@@ -8,7 +8,7 @@ TestDock is a Go library that simplifies database testing by providing an easy w
 
 ## Features
 
-- **Multiple Database Support**  
+- **Multiple Database Support**
   - MongoDB: `GetMongoDatabase` function
   - PostgreSQL (with both `pgx` and `pq` drivers): `GetPgxPool` and `GetPqConn` functions
   - MySQL: `GetMySQLConn` function
@@ -76,32 +76,31 @@ the `RunModeDocker` mode and uses the input string as the container configuratio
 the `RunModeExternal` mode and uses the string from the environment variable to connect to the external database. In this case, the `dsn` parameter of the constructor function is ignored.
 Thus, in this mode, the `dsn` parameter is used as a fallback if the environment variable is not set.
 
+### Parallel tests
+
+Each `Get...` call creates an independent temporary database, so the call can be made inside a test that uses `t.Parallel()`. Keep the returned resource in that test; do not share it with other tests. TestDock registers cleanup through `testing.TB.Cleanup`.
+
+In Docker mode, calls with the same resolved DSN reuse one container. TestDock runs at most four database preparations concurrently for that DSN. A preparation includes database creation and automatic migrations. Additional calls wait for a preparation slot instead of overloading the database server.
+
 ### PostgreSQL Example (using pgx)
 
 ```go
 import (
     "testing"
+
     "github.com/n-r-w/testdock/v2"
 )
 
-func TestDatabase(t *testing.T) {          
-    // Get a connection pool to a test database.
+func TestDatabase(t *testing.T) {
+    t.Parallel()
 
-    /* 
-    If the environment variable TESTDOCK_DSN_PGX is set, then the input 
-    connection string is ignored and the value from the environment variable
-    is used. If the environment variable TESTDOCK_DSN_PGX is not set, 
-    then the input connection string is used to generate the Docker container 
-    configuration.
-    */
-
-    pool, _ := testdock.GetPgxPool(t, 
+    pool, _ := testdock.GetPgxPool(t,
         testdock.DefaultPostgresDSN,
-        testdock.WithMigrations("migrations", testdock.GooseMigrateFactoryPGX),        
+        testdock.WithMigrations("migrations", testdock.GooseMigrateFactoryPGX),
     )
-    
-    // Use the pool for your tests
-    // The database will be automatically cleaned up after the test
+
+    // Prepare isolated data, run the code under test, and assert through pool.
+    // The pool and temporary database are cleaned up automatically.
 }
 ```
 
@@ -113,13 +112,13 @@ import (
     "github.com/n-r-w/testdock/v2"
 )
 
-func TestMongoDB(t *testing.T) {        
+func TestMongoDB(t *testing.T) {
     // Get a connection to a test database
     db, _ := testdock.GetMongoDatabase(t, testdock.DefaultMongoDSN,
         testdock.WithMode(testdock.RunModeDocker),
         testdock.WithMigrations("migrations", testdock.GolangMigrateFactory),
     )
-    
+
     // Use the database for your tests
     // The database will be automatically cleaned up after the test
 }
@@ -168,6 +167,8 @@ TestDock supports two popular migration tools:
 
 <https://github.com/pressly/goose>
 
+Parallel tests must not use Goose package-level state APIs such as `goose.SetDialect`, `goose.SetBaseFS`, `goose.Up*`, or `goose.Down*`. Use `WithMigrations`, `WithMigrationsToVersion`, `ApplyMigrations`, or `ApplyMigrationsToVersion`. When a rollback is required, create a separate `goose.Provider` for each temporary database.
+
 ```go
  db, _ := GetPqConn(t,
     "postgres://postgres:secret@127.0.0.1:5432/postgres?sslmode=disable",
@@ -183,9 +184,9 @@ TestDock supports two popular migration tools:
 ```go
 db, _ := GetMongoDatabase(t,
     testdock.DefaultMongoDSN,
-    WithDockerRepository("mongo"),
-    WithDockerImage("6.0.20"),
-    WithMigrations("migrations/mongodb", testdock.GolangMigrateFactory),
+    testdock.WithDockerRepository("mongo"),
+    testdock.WithDockerImage("6.0.20"),
+    testdock.WithMigrations("migrations/mongodb", testdock.GolangMigrateFactory),
  )
 ```
 
@@ -195,7 +196,7 @@ You can also use a custom migration tool implementing the `testdock.MigrateFacto
 
 ## Requirements
 
-- Go 1.23 or higher
+- Go 1.26 or higher
 - Docker (when using `RunModeDocker` or `RunModeAuto`)
 
 ## License

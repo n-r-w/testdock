@@ -31,6 +31,8 @@ const (
 	DefaultTotalRetryDuration = time.Second * 30
 	// defaultCloseTimeout is the default timeout for closing returned resources during cleanup.
 	defaultCloseTimeout = time.Second * 30
+	// maxParallelDatabasePreparations limits load from concurrent database creation and migrations for one DSN.
+	maxParallelDatabasePreparations = 4
 )
 
 // PrepareCleanUp - function for prepare to delete temporary test database.
@@ -70,10 +72,42 @@ type testDB struct {
 	dockerEnv            []string // environment variables for the docker container
 }
 
-//nolint:gochecknoglobals // used to synchronize access to the same database connection string across tests.
+// databaseConcurrencyState coordinates shared infrastructure and database preparation for one DSN.
+type databaseConcurrencyState struct {
+	infrastructureMu sync.Mutex
+	preparationSlots chan struct{}
+}
+
+// newDatabaseConcurrencyState creates coordination state for one resolved database connection string.
+func newDatabaseConcurrencyState() *databaseConcurrencyState {
+	return &databaseConcurrencyState{
+		infrastructureMu: sync.Mutex{},
+		preparationSlots: make(chan struct{}, maxParallelDatabasePreparations),
+	}
+}
+
+// initializeInfrastructure serializes shared Docker resource initialization without blocking later preparation.
+func (s *databaseConcurrencyState) initializeInfrastructure(operation func() error) error {
+	s.infrastructureMu.Lock()
+	defer s.infrastructureMu.Unlock()
+
+	return operation()
+}
+
+// runDatabasePreparation executes creation and migrations under the per-DSN concurrency limit.
+func (s *databaseConcurrencyState) runDatabasePreparation(operation func() error) error {
+	s.preparationSlots <- struct{}{}
+	defer func() {
+		<-s.preparationSlots
+	}()
+
+	return operation()
+}
+
+//nolint:gochecknoglobals // package-level state coordinates callers that use the same resolved DSN.
 var (
-	globalMu      sync.Mutex
-	globalMuByDSN = make(map[string]*sync.Mutex)
+	globalDatabaseConcurrencyMu    sync.Mutex
+	globalDatabaseConcurrencyByDSN = make(map[string]*databaseConcurrencyState)
 )
 
 // newTDB creates a new test database and applies migrations.
@@ -120,37 +154,46 @@ func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option
 		return nil
 	}
 
-	globalMu.Lock()
-	mu, ok := globalMuByDSN[db.dsn]
+	// Reuse one coordination state for every caller targeting the same resolved DSN.
+	globalDatabaseConcurrencyMu.Lock()
+	concurrencyState, ok := globalDatabaseConcurrencyByDSN[db.dsn]
 	if !ok {
-		mu = &sync.Mutex{}
-		globalMuByDSN[db.dsn] = mu
+		concurrencyState = newDatabaseConcurrencyState()
+		globalDatabaseConcurrencyByDSN[db.dsn] = concurrencyState
 	}
-	globalMu.Unlock()
-
-	mu.Lock()
-	defer mu.Unlock()
+	globalDatabaseConcurrencyMu.Unlock()
 
 	if db.mode == RunModeDocker {
 		db.logger.Info(ctx, "using docker test database", "dsn", db.dsnNoPass)
-		if errResult = db.createDockerResources(ctx); errResult != nil {
+
+		// Only shared container initialization is serialized; database preparation uses separate slots.
+		errResult = concurrencyState.initializeInfrastructure(func() error {
+			return db.createDockerResources(ctx)
+		})
+		if errResult != nil {
 			return nil
 		}
 	} else {
 		db.logger.Info(ctx, "using real test database", "dsn", db.dsnNoPass)
 	}
 
-	if errResult = db.createTestDatabase(ctx); errResult != nil {
+	// Bound creation and migrations together because both consume resources of the same database server.
+	errResult = concurrencyState.runDatabasePreparation(func() error {
+		if err := db.createTestDatabase(ctx); err != nil {
+			return err
+		}
+
+		if db.migrationsDir != "" {
+			return db.migrationsUp(ctx)
+		}
+
+		return nil
+	})
+	if errResult != nil {
 		if err := db.close(ctx); err != nil {
 			db.logger.Info(ctx, "failed to close test database", "dsn", db.dsnNoPass, "error", err)
 		}
 		return nil
-	}
-
-	if db.migrationsDir != "" {
-		if errResult = db.migrationsUp(ctx); errResult != nil {
-			return nil
-		}
 	}
 
 	tb.Cleanup(func() {

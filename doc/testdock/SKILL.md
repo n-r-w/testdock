@@ -2,7 +2,7 @@
 name: testdock
 description: Guidelines for using `github.com/n-r-w/testdock/v2` package.
 metadata:
-  version: "1.0"
+  version: "1.1"
 ---
 
 <testdock name="github.com/n-r-w/testdock/v2 guidelines">
@@ -23,19 +23,28 @@ metadata:
         14. Use WithDockerRepository, WithDockerImage, WithDockerPort, WithDockerSocketEndpoint, WithDockerEnv, and WithUnsetProxyEnv only when default Docker settings are not enough.
         15. Use WithRetryTimeout and WithTotalRetryDuration only for slow startup; retry timeout must be less than total retry duration.
         16. Use WithCloseTimeout only for slow cleanup; close timeout must be greater than 0.
+        17. Parallel tests MUST NOT use Goose package-level state APIs (goose.SetDialect, goose.SetBaseFS, goose.Up*, goose.Down*). Use WithMigrations, WithMigrationsToVersion, ApplyMigrations, or ApplyMigrationsToVersion instead.
+            For rollback operations, create a separate goose.Provider for each temporary database.
     </instructions>
     <examples>
         ```go
         import (
             "testing"
-            "github.com/jackc/pgx/v5/pgxpool"
             "github.com/n-r-w/testdock/v2"
         )
 
-        func newTestPool(t *testing.T) *pgxpool.Pool {
-            t.Helper()
-            pool, _ := testdock.GetPgxPool(t, testdock.DefaultPostgresDSN)
-            return pool
+        func TestRepository(t *testing.T) {
+            t.Parallel()
+
+            pool, _ := testdock.GetPgxPool(
+                t,
+                testdock.DefaultPostgresDSN,
+                testdock.WithMigrations("{migrations directory}", testdock.GooseMigrateFactoryPGX),
+            )
+
+            // {Prepare isolated test data through pool.}
+            // {Run code under test with pool.}
+            // {Assert results through pool.}
         }
         ```
     </examples>
