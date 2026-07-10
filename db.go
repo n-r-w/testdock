@@ -214,24 +214,12 @@ func (d *testDB) migrationsUp(ctx context.Context) error {
 	defer d.logger.Info(ctx, "migrations up end", "dsn", d.dsnNoPass)
 
 	dsn := d.url.replaceDatabase(d.databaseName).string(false)
-
-	migrator, err := d.migrateFactory(d.t, dsn, d.migrationsDir, d.logger)
-	if err != nil {
-		return fmt.Errorf("new migrator: %w", err)
-	}
-
-	if d.hasMigrationTargetVersion {
-		if err = migrateUpToVersion(ctx, migrator, d.migrationTargetVersion); err != nil {
-			return fmt.Errorf("up migrations to version: %w", err)
-		}
-		return nil
-	}
-
-	if err = migrator.Up(ctx); err != nil {
-		return fmt.Errorf("up migrations: %w", err)
-	}
-
-	return nil
+	return runMigrations(ctx, d.t, dsn, d.migrationsDir, d.migrateFactory, d.logger, migrationRunConfig{
+		retryTimeout:       d.retryTimeout,
+		totalRetryDuration: d.totalRetryDuration,
+		targetVersion:      d.migrationTargetVersion,
+		hasTargetVersion:   d.hasMigrationTargetVersion,
+	})
 }
 
 // close closes the test database.

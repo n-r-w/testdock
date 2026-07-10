@@ -139,6 +139,8 @@ func TestMongoDB(t *testing.T) {
 - `WithTotalRetryDuration(duration)`: Configure total retry duration (default 30s). Must be greater than retryTimeout
 - `WithCloseTimeout(duration)`: Configure cleanup timeout for closing returned resources (default 30s). Must be greater than 0. It covers `pgxpool.Pool.Close`, `sql.DB.Close`, and `mongo.Client.Disconnect`. It does not cover SQL `DROP DATABASE`, MongoDB `Drop`, or Docker cleanup.
 
+`WithRetryTimeout` and `WithTotalRetryDuration` also control retries for PostgreSQL `SQLSTATE 53300` while a migration connection is being established. Migration execution itself is never retried.
+
 ### Docker Configuration
 
 - `WithDockerSocketEndpoint(endpoint)`: Custom Docker daemon socket
@@ -167,7 +169,7 @@ TestDock supports two popular migration tools:
 
 <https://github.com/pressly/goose>
 
-Parallel tests must not use Goose package-level state APIs such as `goose.SetDialect`, `goose.SetBaseFS`, `goose.Up*`, or `goose.Down*`. Use `WithMigrations`, `WithMigrationsToVersion`, `ApplyMigrations`, or `ApplyMigrationsToVersion`. When a rollback is required, create a separate `goose.Provider` for each temporary database.
+Parallel tests must not use Goose package-level state APIs such as `goose.SetDialect`, `goose.SetBaseFS`, `goose.Up*`, or `goose.Down*`. Use `WithMigrations`, `WithMigrationsToVersion`, `ApplyMigrations`, or `ApplyMigrationsToVersion`. When a rollback is required, create a separate `goose.Provider` for each temporary database. Close it before the migration helper returns instead of using `testing.TB.Cleanup`, and preserve migration and close errors with `errors.Join`.
 
 ```go
  db, _ := GetPqConn(t,

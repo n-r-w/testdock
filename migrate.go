@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/mongodb"  // require for mongodb
 	_ "github.com/golang-migrate/migrate/v4/database/postgres" // require for gomigrate
@@ -33,14 +35,81 @@ type VersionedMigrator interface {
 	UpTo(ctx context.Context, version int64) error
 }
 
+const postgresTooManyClientsSQLState = "53300"
+
+// sqlStateError exposes a database error code without coupling retry logic to a specific driver.
+type sqlStateError interface {
+	SQLState() string
+}
+
+// retryMigrationConnection retries PostgreSQL capacity errors before migration execution starts.
+func retryMigrationConnection(
+	ctx context.Context,
+	logger ctxlog.ILogger,
+	retryTimeout, totalRetryDuration time.Duration,
+	operation func() error,
+) error {
+	var attempt int
+	wrappedOperation := func() (struct{}, error) {
+		err := operation()
+		if err == nil {
+			return struct{}{}, nil
+		}
+		if !hasSQLState(err, postgresTooManyClientsSQLState) {
+			return struct{}{}, backoff.Permanent(err)
+		}
+
+		attempt++
+		logger.Info(ctx, "retrying migration database connection", "attempt", attempt, "error", err)
+		return struct{}{}, err
+	}
+
+	_, err := backoff.Retry(
+		ctx,
+		wrappedOperation,
+		backoff.WithBackOff(backoff.NewConstantBackOff(retryTimeout)),
+		backoff.WithMaxElapsedTime(totalRetryDuration),
+	)
+	if err == nil || !hasSQLState(err, postgresTooManyClientsSQLState) {
+		return err
+	}
+
+	return fmt.Errorf("migration connection retry failed after %d attempts: %w", attempt, err)
+}
+
+// hasSQLState checks wrapped driver errors through their common SQLSTATE contract.
+func hasSQLState(err error, state string) bool {
+	var stateErr sqlStateError
+	return errors.As(err, &stateErr) && stateErr.SQLState() == state
+}
+
+// migrationConnectionPreparer exposes connection setup for built-in lazy migrators without changing public APIs.
+type migrationConnectionPreparer interface {
+	prepareMigrationConnection(ctx context.Context) error
+	closeMigrationConnection() error
+}
+
+// migrationRunConfig defines retry and target-version behavior for one migration execution.
+type migrationRunConfig struct {
+	retryTimeout       time.Duration // delay between SQLSTATE 53300 connection attempts
+	totalRetryDuration time.Duration // maximum connection preparation duration
+	targetVersion      int64         // numeric migration prefix where execution stops
+	hasTargetVersion   bool          // enables version-limited migration execution
+}
+
 // ApplyMigrations applies all pending migrations to an existing test database.
 // The helper fails tb on invalid input, migrator creation errors, or migration errors.
 func ApplyMigrations(tb testing.TB, dsn, migrationsDir string, migrateFactory MigrateFactory) {
 	tb.Helper()
 
-	ctx := context.Background()
-	migrator := newMigratorForTest(tb, dsn, migrationsDir, migrateFactory)
-	if err := migrator.Up(ctx); err != nil {
+	logger := ctxlog.Must(ctxlog.WithTesting(tb))
+	err := runMigrations(tb.Context(), tb, dsn, migrationsDir, migrateFactory, logger, migrationRunConfig{
+		retryTimeout:       DefaultRetryTimeout,
+		totalRetryDuration: DefaultTotalRetryDuration,
+		targetVersion:      0,
+		hasTargetVersion:   false,
+	})
+	if err != nil {
 		tb.Fatalf("cannot apply migrations: %v", err)
 	}
 }
@@ -51,38 +120,81 @@ func ApplyMigrations(tb testing.TB, dsn, migrationsDir string, migrateFactory Mi
 func ApplyMigrationsToVersion(tb testing.TB, dsn, migrationsDir string, migrateFactory MigrateFactory, version int64) {
 	tb.Helper()
 
-	if err := validateMigrationVersion(version); err != nil {
-		tb.Fatal(err)
-	}
-
-	ctx := context.Background()
-	migrator := newMigratorForTest(tb, dsn, migrationsDir, migrateFactory)
-	if err := migrateUpToVersion(ctx, migrator, version); err != nil {
+	logger := ctxlog.Must(ctxlog.WithTesting(tb))
+	err := runMigrations(tb.Context(), tb, dsn, migrationsDir, migrateFactory, logger, migrationRunConfig{
+		retryTimeout:       DefaultRetryTimeout,
+		totalRetryDuration: DefaultTotalRetryDuration,
+		targetVersion:      version,
+		hasTargetVersion:   true,
+	})
+	if err != nil {
 		tb.Fatalf("cannot apply migrations to version: %v", err)
 	}
 }
 
-// newMigratorForTest validates helper input and creates a migrator for a test database.
-func newMigratorForTest(tb testing.TB, dsn, migrationsDir string, migrateFactory MigrateFactory) Migrator {
-	tb.Helper()
-
+// runMigrations prepares one migrator connection with retry and executes its migration body once.
+func runMigrations(
+	ctx context.Context,
+	tb testing.TB,
+	dsn, migrationsDir string,
+	migrateFactory MigrateFactory,
+	logger ctxlog.ILogger,
+	config migrationRunConfig,
+) error {
 	if dsn == "" {
-		tb.Fatal("dsn is empty")
+		return errors.New("dsn is empty")
 	}
 	if migrationsDir == "" {
-		tb.Fatal("migrationsDir is empty")
+		return errors.New("migrationsDir is empty")
 	}
 	if migrateFactory == nil {
-		tb.Fatal("migrateFactory is nil")
+		return errors.New("migrateFactory is nil")
+	}
+	if config.hasTargetVersion {
+		if err := validateMigrationVersion(config.targetVersion); err != nil {
+			return err
+		}
 	}
 
-	logger := ctxlog.Must(ctxlog.WithTesting(tb))
-	migrator, err := migrateFactory(tb, dsn, migrationsDir, logger)
+	// Retry eager connection setup performed by migration factories before a migrator is returned.
+	var migrator Migrator
+	err := retryMigrationConnection(ctx, logger, config.retryTimeout, config.totalRetryDuration, func() error {
+		candidate, factoryErr := migrateFactory(tb, dsn, migrationsDir, logger)
+		if factoryErr == nil {
+			migrator = candidate
+		}
+		return factoryErr
+	})
 	if err != nil {
-		tb.Fatalf("cannot create migrator: %v", err)
+		return fmt.Errorf("new migrator: %w", err)
+	}
+	if migrator == nil {
+		return errors.New("migrateFactory returned nil migrator")
 	}
 
-	return migrator
+	// Goose and other built-in lazy migrators reserve a connection before their migration body starts.
+	if preparer, ok := migrator.(migrationConnectionPreparer); ok {
+		if err = retryMigrationConnection(ctx, logger, config.retryTimeout, config.totalRetryDuration,
+			func() error { return preparer.prepareMigrationConnection(ctx) }); err != nil {
+			closeErr := preparer.closeMigrationConnection()
+			if closeErr != nil {
+				closeErr = fmt.Errorf("close migrator after connection failure: %w", closeErr)
+			}
+			return errors.Join(fmt.Errorf("prepare migration connection: %w", err), closeErr)
+		}
+	}
+
+	if config.hasTargetVersion {
+		if err = migrateUpToVersion(ctx, migrator, config.targetVersion); err != nil {
+			return fmt.Errorf("up migrations to version: %w", err)
+		}
+		return nil
+	}
+
+	if err = migrator.Up(ctx); err != nil {
+		return fmt.Errorf("up migrations: %w", err)
+	}
+	return nil
 }
 
 // migrateUpToVersion applies migrations up to the numeric file prefix requested by the test.
@@ -128,7 +240,8 @@ func GooseMigrateFactory(dialect goose.Dialect, driver string) MigrateFactory {
 
 // gooseMigrator is a migrator for goose.
 type gooseMigrator struct {
-	p *goose.Provider
+	db *sql.DB
+	p  *goose.Provider
 }
 
 // newGooseMigrator creates a new migrator for goose.
@@ -153,8 +266,19 @@ func newGooseMigrator(
 	}
 
 	return &gooseMigrator{
-		p: p,
+		db: conn,
+		p:  p,
 	}, nil
+}
+
+// prepareMigrationConnection establishes Goose's lazy database connection before migrations start.
+func (m *gooseMigrator) prepareMigrationConnection(ctx context.Context) error {
+	return m.db.PingContext(ctx)
+}
+
+// closeMigrationConnection releases Goose resources when connection preparation cannot complete.
+func (m *gooseMigrator) closeMigrationConnection() error {
+	return m.p.Close()
 }
 
 func (m *gooseMigrator) Up(ctx context.Context) error {
