@@ -72,7 +72,13 @@ func (d *testDB) createSQLDatabase(ctx context.Context) error {
 	}
 	defer db.Close() //nolint:errcheck // Close only releases setup connection; keep ExecContext result.
 
-	_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE %s", d.databaseName))
+	// A template clone inherits the prepared schema and data without rerunning migrations.
+	createDatabaseQuery := fmt.Sprintf("CREATE DATABASE %s", d.databaseName)
+	if d.databaseTemplate != "" {
+		createDatabaseQuery += fmt.Sprintf(" TEMPLATE %s", d.databaseTemplate)
+	}
+
+	_, err = db.ExecContext(ctx, createDatabaseQuery)
 	if err != nil {
 		return fmt.Errorf("create db: %w", err)
 	}

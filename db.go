@@ -45,9 +45,10 @@ type testDB struct {
 
 	logger ctxlog.ILogger // unified way to logging
 
-	databaseName string // name of the test database
-	url          *dbURL // parsed database connection string
-	dsnNoPass    string // database connection string without password
+	databaseName     string // name of the test database
+	databaseTemplate string // source database copied when creating a PostgreSQL clone
+	url              *dbURL // parsed database connection string
+	dsnNoPass        string // database connection string without password
 
 	// options
 	driver                    string           // database driver (pgx, pq, etc)
@@ -119,6 +120,7 @@ func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option
 			t:                         tb,
 			logger:                    ctxlog.Must(ctxlog.WithTesting(tb)),
 			databaseName:              "",
+			databaseTemplate:          "",
 			url:                       nil,
 			dsnNoPass:                 "",
 			driver:                    driver,
