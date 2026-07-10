@@ -86,6 +86,7 @@ func TestWithMigrationsToVersionRejectsInvalidVersion(t *testing.T) {
 		t:                         nil,
 		logger:                    nil,
 		databaseName:              "",
+		databaseTemplate:          "",
 		url:                       nil,
 		dsnNoPass:                 "",
 		driver:                    "pgx",

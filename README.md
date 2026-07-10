@@ -10,7 +10,7 @@ TestDock is a Go library that simplifies database testing by providing an easy w
 
 - **Multiple Database Support**
   - MongoDB: `GetMongoDatabase` function
-  - PostgreSQL (with both `pgx` and `pq` drivers): `GetPgxPool` and `GetPqConn` functions
+  - PostgreSQL: `GetPgxPool`, `GetPqConn`, and reusable migrated templates for `pgx` tests
   - MySQL: `GetMySQLConn` function
   - Any other SQL database supported by `database/sql` <https://go.dev/wiki/SQLDrivers>: `GetSQLConn` function
 
@@ -39,6 +39,7 @@ go get github.com/n-r-w/testdock/v2@latest
 ## Core Functions
 
 - `GetPgxPool`: PostgreSQL connection pool (pgx driver)
+- `NewPostgresTemplate`: Parent-owned migrated PostgreSQL source for fast physical clones
 - `GetPqConn`: PostgreSQL connection (libpq driver)
 - `GetMySQLConn`: MySQL connection
 - `GetSQLConn`: Generic SQL database connection
@@ -82,6 +83,8 @@ Each `Get...` call creates an independent temporary database, so the call can be
 
 In Docker mode, calls with the same resolved DSN reuse one container. TestDock runs at most four database preparations concurrently for that DSN. A preparation includes database creation and automatic migrations. Additional calls wait for a preparation slot instead of overloading the database server.
 
+When a parent test has many PostgreSQL children with identical migrations and initial data, use `NewPostgresTemplate`. The parent prepares one source database, and each child receives an isolated physical clone through `PostgresTemplate.GetPgxPool`. The source remains alive until the parent and all its subtests complete.
+
 ### PostgreSQL Example (using pgx)
 
 ```go
@@ -103,6 +106,47 @@ func TestDatabase(t *testing.T) {
     // The pool and temporary database are cleaned up automatically.
 }
 ```
+
+### Reusing PostgreSQL migrations across parallel tests
+
+```go
+import (
+    "testing"
+
+    "github.com/jackc/pgx/v5/pgxpool"
+    "github.com/n-r-w/testdock/v2"
+)
+
+func TestDatabaseGroup(t *testing.T) {
+    template := testdock.NewPostgresTemplate(
+        t,
+        testdock.DefaultPostgresDSN,
+        testdock.WithPostgresTemplateOptions(
+            testdock.WithMigrations("migrations", testdock.GooseMigrateFactoryPGX),
+        ),
+        testdock.WithPostgresTemplateSetup(func(
+            tb testing.TB,
+            pool *pgxpool.Pool,
+            _ testdock.Informer,
+        ) {
+            // Add shared seed data once. The setup pool is closed before cloning starts.
+        }),
+    )
+
+    for _, name := range []string{"first", "second"} {
+        t.Run(name, func(t *testing.T) {
+            t.Parallel()
+
+            pool, _ := template.GetPgxPool(t)
+            // Mutations are isolated from every other clone.
+        })
+    }
+}
+```
+
+`WithPostgresTemplateOptions` applies existing database options only to the source. Automatic migrations and `WithPostgresTemplateSetup` run once. PostgreSQL requires the source database to have no open connections while it is copied, so TestDock closes the setup pool before returning the template.
+
+`CREATE DATABASE ... TEMPLATE` copies database objects and data, but PostgreSQL does not copy database-level `GRANT` permissions or settings created through `ALTER DATABASE`.
 
 ### MongoDB Example
 

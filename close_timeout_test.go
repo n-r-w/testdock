@@ -251,6 +251,7 @@ func newCloseTimeoutOptionTestDB() *testDB {
 		t:                         nil,
 		logger:                    nil,
 		databaseName:              "",
+		databaseTemplate:          "",
 		url:                       nil,
 		dsnNoPass:                 "",
 		driver:                    "pgx",
