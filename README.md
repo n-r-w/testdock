@@ -81,7 +81,7 @@ Thus, in this mode, the `dsn` parameter is used as a fallback if the environment
 
 Each `Get...` call creates an independent temporary database, so the call can be made inside a test that uses `t.Parallel()`. Keep the returned resource in that test; do not share it with other tests. TestDock registers cleanup through `testing.TB.Cleanup`.
 
-In Docker mode, calls with the same resolved DSN reuse one container. TestDock runs at most four database preparations concurrently for that DSN. A preparation includes database creation and automatic migrations. Additional calls wait for a preparation slot instead of overloading the database server.
+In Docker mode, calls with the same resolved DSN reuse one container. TestDock runs at most four database lifecycle operations concurrently per test process and DSN. Creation, automatic migrations, and cleanup share this limit, so waiting operations do not consume database connections. Separate `go test` package processes do not share the limiter. PostgreSQL cleanup retries `DROP DATABASE` after SQLSTATE `53300` using `WithRetryTimeout` and `WithTotalRetryDuration`; an exhausted cleanup error is logged without changing the test result.
 
 When a parent test has many PostgreSQL children with identical migrations and initial data, use `NewPostgresTemplate`. The parent prepares one source database, and each child receives an isolated physical clone through `PostgresTemplate.GetPgxPool`. The source remains alive until the parent and all its subtests complete.
 

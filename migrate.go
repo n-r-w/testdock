@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff/v5"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/mongodb"  // require for mongodb
 	_ "github.com/golang-migrate/migrate/v4/database/postgres" // require for gomigrate
@@ -33,54 +32,6 @@ type Migrator interface {
 type VersionedMigrator interface {
 	Migrator
 	UpTo(ctx context.Context, version int64) error
-}
-
-const postgresTooManyClientsSQLState = "53300"
-
-// sqlStateError exposes a database error code without coupling retry logic to a specific driver.
-type sqlStateError interface {
-	SQLState() string
-}
-
-// retryMigrationConnection retries PostgreSQL capacity errors before migration execution starts.
-func retryMigrationConnection(
-	ctx context.Context,
-	logger ctxlog.ILogger,
-	retryTimeout, totalRetryDuration time.Duration,
-	operation func() error,
-) error {
-	var attempt int
-	wrappedOperation := func() (struct{}, error) {
-		err := operation()
-		if err == nil {
-			return struct{}{}, nil
-		}
-		if !hasSQLState(err, postgresTooManyClientsSQLState) {
-			return struct{}{}, backoff.Permanent(err)
-		}
-
-		attempt++
-		logger.Info(ctx, "retrying migration database connection", "attempt", attempt, "error", err)
-		return struct{}{}, err
-	}
-
-	_, err := backoff.Retry(
-		ctx,
-		wrappedOperation,
-		backoff.WithBackOff(backoff.NewConstantBackOff(retryTimeout)),
-		backoff.WithMaxElapsedTime(totalRetryDuration),
-	)
-	if err == nil || !hasSQLState(err, postgresTooManyClientsSQLState) {
-		return err
-	}
-
-	return fmt.Errorf("migration connection retry failed after %d attempts: %w", attempt, err)
-}
-
-// hasSQLState checks wrapped driver errors through their common SQLSTATE contract.
-func hasSQLState(err error, state string) bool {
-	var stateErr sqlStateError
-	return errors.As(err, &stateErr) && stateErr.SQLState() == state
 }
 
 // migrationConnectionPreparer exposes connection setup for built-in lazy migrators without changing public APIs.
@@ -158,13 +109,20 @@ func runMigrations(
 
 	// Retry eager connection setup performed by migration factories before a migrator is returned.
 	var migrator Migrator
-	err := retryMigrationConnection(ctx, logger, config.retryTimeout, config.totalRetryDuration, func() error {
-		candidate, factoryErr := migrateFactory(tb, dsn, migrationsDir, logger)
-		if factoryErr == nil {
-			migrator = candidate
-		}
-		return factoryErr
-	})
+	err := retryPostgresOperation(
+		ctx,
+		logger,
+		config.retryTimeout,
+		config.totalRetryDuration,
+		"create migrator",
+		func() error {
+			candidate, factoryErr := migrateFactory(tb, dsn, migrationsDir, logger)
+			if factoryErr == nil {
+				migrator = candidate
+			}
+			return factoryErr
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("new migrator: %w", err)
 	}
@@ -174,8 +132,14 @@ func runMigrations(
 
 	// Goose and other built-in lazy migrators reserve a connection before their migration body starts.
 	if preparer, ok := migrator.(migrationConnectionPreparer); ok {
-		if err = retryMigrationConnection(ctx, logger, config.retryTimeout, config.totalRetryDuration,
-			func() error { return preparer.prepareMigrationConnection(ctx) }); err != nil {
+		if err = retryPostgresOperation(
+			ctx,
+			logger,
+			config.retryTimeout,
+			config.totalRetryDuration,
+			"prepare migration connection",
+			func() error { return preparer.prepareMigrationConnection(ctx) },
+		); err != nil {
 			closeErr := preparer.closeMigrationConnection()
 			if closeErr != nil {
 				closeErr = fmt.Errorf("close migrator after connection failure: %w", closeErr)
@@ -224,9 +188,9 @@ func validateMigrationVersion(version int64) error {
 //nolint:gochecknoglobals // predefined migrator factories.
 var (
 	// GooseMigrateFactoryPGX is a migrator for https://github.com/pressly/goose with pgx driver.
-	GooseMigrateFactoryPGX = GooseMigrateFactory(goose.DialectPostgres, "pgx")
+	GooseMigrateFactoryPGX = GooseMigrateFactory(goose.DialectPostgres, pgxDriverName)
 	// GooseMigrateFactoryPQ is a migrator for https://github.com/pressly/goose with pq driver.
-	GooseMigrateFactoryPQ = GooseMigrateFactory(goose.DialectPostgres, "postgres")
+	GooseMigrateFactoryPQ = GooseMigrateFactory(goose.DialectPostgres, postgresDriverName)
 	// GooseMigrateFactoryMySQL is a migrator for https://github.com/pressly/goose with mysql driver.
 	GooseMigrateFactoryMySQL = GooseMigrateFactory(goose.DialectMySQL, "mysql")
 )

@@ -19,8 +19,9 @@ const (
 	testTooManyClientsSQLState  = "53300"
 )
 
-// TestRetryMigrationConnectionRetriesTooManyClients verifies that temporary PostgreSQL saturation waits for capacity.
-func TestRetryMigrationConnectionRetriesTooManyClients(t *testing.T) {
+// TestRetryPostgresOperationRetriesTooManyClients verifies that temporary PostgreSQL saturation
+// waits for capacity.
+func TestRetryPostgresOperationRetriesTooManyClients(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
@@ -28,23 +29,25 @@ func TestRetryMigrationConnectionRetriesTooManyClients(t *testing.T) {
 		attempts := 0
 		logger := ctxlog.Must(ctxlog.WithTesting(t))
 
-		// ACT: Retry until the third connection attempt succeeds.
-		err := retryMigrationConnection(t.Context(), logger, time.Second, 10*time.Second, func() error {
-			attempts++
-			if attempts < 3 {
-				return fmt.Errorf("connect migration database: %w", testSQLStateError{state: testTooManyClientsSQLState})
-			}
-			return nil
-		})
+		// ACT: Retry the cleanup operation until the third connection attempt succeeds.
+		err := retryPostgresOperation(
+			t.Context(), logger, time.Second, 10*time.Second, "drop database", func() error {
+				attempts++
+				if attempts < 3 {
+					return fmt.Errorf("execute postgres operation: %w", testSQLStateError{state: testTooManyClientsSQLState})
+				}
+				return nil
+			},
+		)
 
-		// ASSERT: Only connection preparation is repeated.
+		// ASSERT: Only PostgreSQL capacity errors are repeated.
 		require.NoError(t, err)
 		assert.Equal(t, 3, attempts)
 	})
 }
 
-// TestRetryMigrationConnectionReturnsOtherErrors verifies that unrelated connection failures are not retried.
-func TestRetryMigrationConnectionReturnsOtherErrors(t *testing.T) {
+// TestRetryPostgresOperationReturnsOtherErrors verifies that unrelated operation failures are not retried.
+func TestRetryPostgresOperationReturnsOtherErrors(t *testing.T) {
 	t.Parallel()
 
 	// ARRANGE: Use an error without the PostgreSQL capacity SQLSTATE.
@@ -52,11 +55,13 @@ func TestRetryMigrationConnectionReturnsOtherErrors(t *testing.T) {
 	attempts := 0
 	logger := ctxlog.Must(ctxlog.WithTesting(t))
 
-	// ACT: Execute connection preparation with the non-retryable error.
-	err := retryMigrationConnection(t.Context(), logger, time.Second, 10*time.Second, func() error {
-		attempts++
-		return expectedErr
-	})
+	// ACT: Execute cleanup with the non-retryable error.
+	err := retryPostgresOperation(
+		t.Context(), logger, time.Second, 10*time.Second, "drop database", func() error {
+			attempts++
+			return expectedErr
+		},
+	)
 
 	// ASSERT: The original error is returned after one attempt.
 	require.ErrorIs(t, err, expectedErr)
@@ -89,7 +94,7 @@ func TestWithMigrationsToVersionRejectsInvalidVersion(t *testing.T) {
 		databaseTemplate:          "",
 		url:                       nil,
 		dsnNoPass:                 "",
-		driver:                    "pgx",
+		driver:                    pgxDriverName,
 		mode:                      RunModeExternal,
 		dsn:                       DefaultPostgresDSN,
 		retryTimeout:              DefaultRetryTimeout,
@@ -110,7 +115,7 @@ func TestWithMigrationsToVersionRejectsInvalidVersion(t *testing.T) {
 		dockerEnv:                 nil,
 	}
 
-	err := db.prepareOptions("pgx", []Option{
+	err := db.prepareOptions(pgxDriverName, []Option{
 		WithMigrationsToVersion("migrations/pg/goose", GooseMigrateFactoryPGX, testInvalidMigrationVersion),
 	})
 	require.ErrorContains(t, err, "migration target version")

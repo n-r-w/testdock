@@ -31,8 +31,8 @@ const (
 	DefaultTotalRetryDuration = time.Second * 30
 	// defaultCloseTimeout is the default timeout for closing returned resources during cleanup.
 	defaultCloseTimeout = time.Second * 30
-	// maxParallelDatabasePreparations limits load from concurrent database creation and migrations for one DSN.
-	maxParallelDatabasePreparations = 4
+	// maxParallelDatabaseOperations limits database creation, migrations, and cleanup for one DSN.
+	maxParallelDatabaseOperations = 4
 )
 
 // PrepareCleanUp - function for prepare to delete temporary test database.
@@ -73,17 +73,17 @@ type testDB struct {
 	dockerEnv            []string // environment variables for the docker container
 }
 
-// databaseConcurrencyState coordinates shared infrastructure and database preparation for one DSN.
+// databaseConcurrencyState coordinates shared infrastructure and database lifecycle operations for one DSN.
 type databaseConcurrencyState struct {
 	infrastructureMu sync.Mutex
-	preparationSlots chan struct{}
+	operationSlots   chan struct{}
 }
 
 // newDatabaseConcurrencyState creates coordination state for one resolved database connection string.
 func newDatabaseConcurrencyState() *databaseConcurrencyState {
 	return &databaseConcurrencyState{
 		infrastructureMu: sync.Mutex{},
-		preparationSlots: make(chan struct{}, maxParallelDatabasePreparations),
+		operationSlots:   make(chan struct{}, maxParallelDatabaseOperations),
 	}
 }
 
@@ -95,11 +95,11 @@ func (s *databaseConcurrencyState) initializeInfrastructure(operation func() err
 	return operation()
 }
 
-// runDatabasePreparation executes creation and migrations under the per-DSN concurrency limit.
-func (s *databaseConcurrencyState) runDatabasePreparation(operation func() error) error {
-	s.preparationSlots <- struct{}{}
+// runDatabaseOperation executes one lifecycle operation under the per-DSN concurrency limit.
+func (s *databaseConcurrencyState) runDatabaseOperation(operation func() error) error {
+	s.operationSlots <- struct{}{}
 	defer func() {
-		<-s.preparationSlots
+		<-s.operationSlots
 	}()
 
 	return operation()
@@ -179,8 +179,8 @@ func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option
 		db.logger.Info(ctx, "using real test database", "dsn", db.dsnNoPass)
 	}
 
-	// Bound creation and migrations together because both consume resources of the same database server.
-	errResult = concurrencyState.runDatabasePreparation(func() error {
+	// Bound creation and migrations because both consume resources of the same database server.
+	errResult = concurrencyState.runDatabaseOperation(func() error {
 		if err := db.createTestDatabase(ctx); err != nil {
 			return err
 		}
@@ -192,15 +192,24 @@ func newTDB(ctx context.Context, tb testing.TB, driver, dsn string, opt []Option
 		return nil
 	})
 	if errResult != nil {
-		if err := db.close(ctx); err != nil {
-			db.logger.Info(ctx, "failed to close test database", "dsn", db.dsnNoPass, "error", err)
+		// Failed preparation still uses the shared limit while removing a partially created database.
+		closeErr := concurrencyState.runDatabaseOperation(func() error {
+			return db.close(ctx)
+		})
+		if closeErr != nil {
+			db.logger.Info(ctx, "failed to close test database", "dsn", db.dsnNoPass, "error", closeErr)
 		}
 		return nil
 	}
 
 	tb.Cleanup(func() {
 		cleanupCtx := context.Background()
-		if closeErr := db.close(cleanupCtx); closeErr != nil {
+
+		// Waiting for a slot does not consume an administrative database connection.
+		closeErr := concurrencyState.runDatabaseOperation(func() error {
+			return db.close(cleanupCtx)
+		})
+		if closeErr != nil {
 			db.logger.Info(cleanupCtx, "failed to close test database", "dsn", db.dsnNoPass, "error", closeErr)
 		} else {
 			db.logger.Info(cleanupCtx, "test database closed", "dsn", db.dsnNoPass)
@@ -249,7 +258,26 @@ func (d *testDB) close(ctx context.Context) error {
 			}
 		}
 
-		if _, err = db.ExecContext(ctx, fmt.Sprintf("DROP DATABASE %s", d.databaseName)); err != nil {
+		// PostgreSQL rejects the connection with SQLSTATE 53300 before executing DROP DATABASE.
+		// Retrying after a delay avoids leaving the database behind during a short capacity spike.
+		dropDatabase := func() error {
+			_, dropErr := db.ExecContext(ctx, fmt.Sprintf("DROP DATABASE %s", d.databaseName))
+			return dropErr
+		}
+		switch d.driver {
+		case pgxDriverName, postgresDriverName:
+			err = retryPostgresOperation(
+				ctx,
+				d.logger,
+				d.retryTimeout,
+				d.totalRetryDuration,
+				"drop database",
+				dropDatabase,
+			)
+		default:
+			err = dropDatabase()
+		}
+		if err != nil {
 			return fmt.Errorf("drop db: %w", err)
 		}
 

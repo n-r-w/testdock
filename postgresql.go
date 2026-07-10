@@ -12,6 +12,13 @@ import (
 	_ "github.com/lib/pq"              // pq postgres driver
 )
 
+const (
+	// pgxDriverName identifies the pgx database/sql driver and migration adapter.
+	pgxDriverName = "pgx"
+	// postgresDriverName identifies the lib/pq database/sql driver and migration adapter.
+	postgresDriverName = "postgres"
+)
+
 // GetPgxPool inits a test postgresql (pgx driver) database, applies migrations,
 // and returns pgx connection pool to the database.
 func GetPgxPool(tb testing.TB, dsn string, opt ...Option) (*pgxpool.Pool, Informer) {
@@ -19,7 +26,7 @@ func GetPgxPool(tb testing.TB, dsn string, opt ...Option) (*pgxpool.Pool, Inform
 
 	ctx := context.Background()
 
-	tDB := newTDB(ctx, tb, "pgx", dsn, getPostgresOptions(tb, dsn, opt...))
+	tDB := newTDB(ctx, tb, pgxDriverName, dsn, getPostgresOptions(tb, dsn, opt...))
 
 	db, err := tDB.connectPgxDB(ctx)
 	if err != nil {
@@ -45,7 +52,7 @@ func GetPgxPool(tb testing.TB, dsn string, opt ...Option) (*pgxpool.Pool, Inform
 func GetPqConn(ctx context.Context, tb testing.TB, dsn string, opt ...Option) (*sql.DB, Informer) {
 	tb.Helper()
 
-	tDB := newTDB(ctx, tb, "postgres", dsn, getPostgresOptions(tb, dsn, opt...))
+	tDB := newTDB(ctx, tb, postgresDriverName, dsn, getPostgresOptions(tb, dsn, opt...))
 
 	db, err := tDB.connectSQLDB(ctx, true)
 	if err != nil {

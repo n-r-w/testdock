@@ -63,7 +63,7 @@ func TestWithCloseTimeoutValidation(t *testing.T) {
 			t.Parallel()
 
 			db := newCloseTimeoutOptionTestDB()
-			err := db.prepareOptions("pgx", tt.options)
+			err := db.prepareOptions(pgxDriverName, tt.options)
 			if tt.wantErrSubstr != "" {
 				require.ErrorContains(t, err, tt.wantErrSubstr)
 				return
@@ -254,7 +254,7 @@ func newCloseTimeoutOptionTestDB() *testDB {
 		databaseTemplate:          "",
 		url:                       nil,
 		dsnNoPass:                 "",
-		driver:                    "pgx",
+		driver:                    pgxDriverName,
 		mode:                      RunModeExternal,
 		dsn:                       DefaultPostgresDSN,
 		retryTimeout:              DefaultRetryTimeout,

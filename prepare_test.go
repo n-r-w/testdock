@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDatabaseConcurrencyStateLimitsPreparations verifies that one DSN cannot overload its database server.
-func TestDatabaseConcurrencyStateLimitsPreparations(t *testing.T) {
+// TestDatabaseConcurrencyStateLimitsOperations verifies that preparation and cleanup for one DSN
+// share a single capacity limit.
+func TestDatabaseConcurrencyStateLimitsOperations(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		// ARRANGE: Start one more request than the configured preparation limit.
-		const requestCount = maxParallelDatabasePreparations + 1
+		// ARRANGE: Start one more request than the configured database operation limit.
+		const requestCount = maxParallelDatabaseOperations + 1
 
 		state := newDatabaseConcurrencyState()
 		started := make(chan struct{}, requestCount)
@@ -23,10 +24,10 @@ func TestDatabaseConcurrencyStateLimitsPreparations(t *testing.T) {
 		errors := make(chan error, requestCount)
 		var workers sync.WaitGroup
 
-		// ACT: Keep every admitted preparation active until the limit is observed.
+		// ACT: Keep every admitted database operation active until the shared limit is observed.
 		for range requestCount {
 			workers.Go(func() {
-				errors <- state.runDatabasePreparation(func() error {
+				errors <- state.runDatabaseOperation(func() error {
 					started <- struct{}{}
 					<-release
 					return nil
@@ -34,7 +35,7 @@ func TestDatabaseConcurrencyStateLimitsPreparations(t *testing.T) {
 			})
 		}
 
-		for range maxParallelDatabasePreparations {
+		for range maxParallelDatabaseOperations {
 			<-started
 		}
 		synctest.Wait()

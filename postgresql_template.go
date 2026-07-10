@@ -60,7 +60,7 @@ func NewPostgresTemplate(
 
 	// Reuse the standard PostgreSQL lifecycle so Docker and external modes behave consistently.
 	ctx := context.Background()
-	source := newTDB(ctx, tb, "pgx", dsn, getPostgresOptions(tb, dsn, config.databaseOptions...))
+	source := newTDB(ctx, tb, pgxDriverName, dsn, getPostgresOptions(tb, dsn, config.databaseOptions...))
 
 	// The setup pool is never exposed because PostgreSQL requires a connection-free source database.
 	setupPool, err := source.connectPgxDB(ctx)
@@ -103,7 +103,7 @@ func (template *PostgresTemplate) GetPgxPool(tb testing.TB) (*pgxpool.Pool, Info
 	)
 
 	ctx := context.Background()
-	clone := newTDB(ctx, tb, "pgx", resolvedDSN, cloneOptions)
+	clone := newTDB(ctx, tb, pgxDriverName, resolvedDSN, cloneOptions)
 	pool, err := clone.connectPgxDB(ctx)
 	if err != nil {
 		tb.Fatalf("cannot connect to postgres clone: %v", err)

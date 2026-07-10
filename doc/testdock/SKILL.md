@@ -2,7 +2,7 @@
 name: testdock
 description: Guidelines for using `github.com/n-r-w/testdock/v2` package.
 metadata:
-  version: "1.3"
+  version: "1.4"
 ---
 
 <testdock name="github.com/n-r-w/testdock/v2 guidelines">
@@ -21,7 +21,7 @@ metadata:
     12. Always pass migrationsDir and MigrateFactory together.
     13. Use GooseMigrateFactoryPGX, GooseMigrateFactoryPQ, GooseMigrateFactoryMySQL, GolangMigrateFactory, or a custom MigrateFactory.
     14. Use WithDockerRepository, WithDockerImage, WithDockerPort, WithDockerSocketEndpoint, WithDockerEnv, and WithUnsetProxyEnv only when default Docker settings are not enough.
-    15. Use WithRetryTimeout and WithTotalRetryDuration only for slow startup or PostgreSQL SQLSTATE 53300 during migration connection setup; retry timeout must be less than total retry duration. Migration execution is never retried.
+    15. Use WithRetryTimeout and WithTotalRetryDuration only for slow startup or PostgreSQL SQLSTATE 53300 during migration connection setup or DROP DATABASE cleanup; retry timeout must be less than total retry duration. Migration execution and other cleanup errors are never retried. Exhausted cleanup errors are logged without failing the test.
     16. Use WithCloseTimeout only for slow cleanup; close timeout must be greater than 0.
     17. Parallel tests MUST NOT use Goose package-level state APIs (goose.SetDialect, goose.SetBaseFS, goose.Up*, goose.Down*). Use WithMigrations, WithMigrationsToVersion, ApplyMigrations, or ApplyMigrationsToVersion instead.
       For rollback operations, create a separate goose.Provider for each temporary database.
@@ -30,6 +30,7 @@ metadata:
     20. Use WithPostgresTemplateSetup for one-time shared seed data after automatic migrations. The callback MUST NOT retain source database connections after it returns because PostgreSQL requires a connection-free source while cloning.
     21. Call PostgresTemplate.GetPgxPool with each child testing.TB. Every call returns an isolated physical clone and registers child cleanup; parallel child calls are safe.
     22. Do not share one PostgresTemplate between tests that require different migration versions, initial data, or migration-transition state. Use a separate template for each identical starting state or the standard per-test helpers.
+    23. Database creation, migrations, and cleanup share a limit of four concurrent operations per DSN within one test process. Separate go test package processes do not share this limit.
   </instructions>
   <examples>
     ```go
