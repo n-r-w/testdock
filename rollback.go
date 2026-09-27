@@ -120,12 +120,5 @@ func (m *golangMigrateMigrator) finishRollback(err error) error {
 		err = nil
 	}
 
-	sourceErr, databaseErr := m.m.Close()
-	if sourceErr != nil {
-		sourceErr = fmt.Errorf("close migration source: %w", sourceErr)
-	}
-	if databaseErr != nil {
-		databaseErr = fmt.Errorf("close migration database: %w", databaseErr)
-	}
-	return errors.Join(err, sourceErr, databaseErr)
+	return m.finishMigration(err)
 }
