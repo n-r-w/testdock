@@ -213,7 +213,7 @@ TestDock supports two popular migration tools:
 
 <https://github.com/pressly/goose>
 
-Parallel tests must not use Goose package-level state APIs such as `goose.SetDialect`, `goose.SetBaseFS`, `goose.Up*`, or `goose.Down*`. Use `WithMigrations`, `WithMigrationsToVersion`, `ApplyMigrations`, or `ApplyMigrationsToVersion`. When a rollback is required, create a separate `goose.Provider` for each temporary database. Close it before the migration helper returns instead of using `testing.TB.Cleanup`, and preserve migration and close errors with `errors.Join`.
+Parallel tests must not use Goose package-level state APIs such as `goose.SetDialect`, `goose.SetBaseFS`, `goose.Up*`, or `goose.Down*`. Use `WithMigrations`, `WithMigrationsToVersion`, `ApplyMigrations`, `ApplyMigrationsToVersion`, `RollbackMigrations`, or `RollbackMigrationsToVersion`. Each built-in Goose operation uses a separate provider for its temporary database.
 
 ```go
  db, _ := GetPqConn(t,
@@ -236,9 +236,48 @@ db, _ := GetMongoDatabase(t,
  )
 ```
 
+### Rolling back migrations
+
+Use rollback helpers to test down scripts in a temporary SQL database created by TestDock. Rollback is not required for cleanup: TestDock drops the temporary database after the test. These helpers are not intended for MongoDB or databases created outside TestDock.
+
+- `RollbackMigrations(t, dsn, migrationsDir, factory)` rolls back all applied migrations in reverse order.
+- `RollbackMigrationsToVersion(t, dsn, migrationsDir, factory, version)` rolls back migrations newer than `version`. The version must be a positive numeric file prefix, including timestamp prefixes. Use `RollbackMigrations` for a full rollback rather than passing zero.
+
+Both helpers support the built-in Goose and golang-migrate factories. A target at or above the database version does not apply migrations. Repeating a full rollback on an empty migration history succeeds. If a target below the database version is missing from the migration files, the selected migration library determines the result.
+
+```go
+func TestMigrationRollback(t *testing.T) {
+    t.Parallel()
+
+    _, info := testdock.GetPgxPool(t, testdock.DefaultPostgresDSN,
+        testdock.WithMigrations("migrations", testdock.GooseMigrateFactoryPGX),
+    )
+
+    // Keep migration 1 and roll back all newer migrations.
+    testdock.RollbackMigrationsToVersion(t, info.DSN(), "migrations", testdock.GooseMigrateFactoryPGX, 1)
+
+    // Roll back the remaining migration, then apply the complete schema again.
+    testdock.RollbackMigrations(t, info.DSN(), "migrations", testdock.GooseMigrateFactoryPGX)
+    testdock.ApplyMigrations(t, info.DSN(), "migrations", testdock.GooseMigrateFactoryPGX)
+}
+```
+
+Invalid inputs, unsupported custom migrators, and rollback or close failures fail the test with the cause. Built-in rollback operations close their migration resources before returning or failing the test, including after SQL errors. Migration and close errors are preserved together. Rollback helpers retry PostgreSQL connection setup on SQLSTATE `53300` with the default retry settings; they never retry migration execution.
+
 ### Custom Migrations
 
 You can also use a custom migration tool implementing the `testdock.MigrateFactory` interface.
+
+Custom factories used for rollback must return a migrator that also implements `testdock.RollbackMigrator`:
+
+```go
+type RollbackMigrator interface {
+    Down(ctx context.Context) error
+    DownTo(ctx context.Context, version int64) error
+}
+```
+
+`Down` and `DownTo` must close their resources before returning, including on failure, and preserve migration and close errors with `errors.Join`. Do not defer resource release to `testing.TB.Cleanup`, because open migration connections can prevent database deletion. `DownTo` must never apply migrations. Existing factories that implement only `Migrator` or `VersionedMigrator` remain usable for applying migrations; rollback helpers fail with a diagnostic naming `RollbackMigrator`.
 
 ## Requirements
 

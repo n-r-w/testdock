@@ -230,6 +230,7 @@ func (d *testDB) migrationsUp(ctx context.Context) error {
 		totalRetryDuration: d.totalRetryDuration,
 		targetVersion:      d.migrationTargetVersion,
 		hasTargetVersion:   d.hasMigrationTargetVersion,
+		rollback:           false,
 	})
 }
 
