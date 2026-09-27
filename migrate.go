@@ -34,6 +34,14 @@ type VersionedMigrator interface {
 	UpTo(ctx context.Context, version int64) error
 }
 
+// RollbackMigrator supports full and version-limited rollback.
+// Implementations must close their resources before returning, including on failure,
+// and preserve both rollback and close errors. DownTo must never apply migrations.
+type RollbackMigrator interface {
+	Down(ctx context.Context) error
+	DownTo(ctx context.Context, version int64) error
+}
+
 // migrationConnectionPreparer exposes connection setup for built-in lazy migrators without changing public APIs.
 type migrationConnectionPreparer interface {
 	prepareMigrationConnection(ctx context.Context) error
@@ -46,6 +54,7 @@ type migrationRunConfig struct {
 	totalRetryDuration time.Duration // maximum connection preparation duration
 	targetVersion      int64         // numeric migration prefix where execution stops
 	hasTargetVersion   bool          // enables version-limited migration execution
+	rollback           bool          // selects down migrations without changing the apply path
 }
 
 // ApplyMigrations applies all pending migrations to an existing test database.
@@ -59,6 +68,7 @@ func ApplyMigrations(tb testing.TB, dsn, migrationsDir string, migrateFactory Mi
 		totalRetryDuration: DefaultTotalRetryDuration,
 		targetVersion:      0,
 		hasTargetVersion:   false,
+		rollback:           false,
 	})
 	if err != nil {
 		tb.Fatalf("cannot apply migrations: %v", err)
@@ -77,6 +87,7 @@ func ApplyMigrationsToVersion(tb testing.TB, dsn, migrationsDir string, migrateF
 		totalRetryDuration: DefaultTotalRetryDuration,
 		targetVersion:      version,
 		hasTargetVersion:   true,
+		rollback:           false,
 	})
 	if err != nil {
 		tb.Fatalf("cannot apply migrations to version: %v", err)
@@ -148,6 +159,10 @@ func runMigrations(
 		}
 	}
 
+	if config.rollback {
+		return migrateDown(ctx, migrator, config)
+	}
+
 	if config.hasTargetVersion {
 		if err = migrateUpToVersion(ctx, migrator, config.targetVersion); err != nil {
 			return fmt.Errorf("up migrations to version: %w", err)
@@ -207,6 +222,8 @@ type gooseMigrator struct {
 	db *sql.DB
 	p  *goose.Provider
 }
+
+var _ RollbackMigrator = (*gooseMigrator)(nil)
 
 // newGooseMigrator creates a new migrator for goose.
 func newGooseMigrator(
@@ -269,6 +286,8 @@ func GolangMigrateFactory(_ testing.TB, dsn, migrationsDir string, logger ctxlog
 type golangMigrateMigrator struct {
 	m *migrate.Migrate
 }
+
+var _ RollbackMigrator = (*golangMigrateMigrator)(nil)
 
 // newGolangMigrateMigrator creates a new migrator for https://github.com/golang-migrate/migrate.
 func newGolangMigrateMigrator(dsn, migrationsDir string, logger ctxlog.ILogger) (*golangMigrateMigrator, error) {

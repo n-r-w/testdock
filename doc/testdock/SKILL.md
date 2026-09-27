@@ -2,7 +2,7 @@
 name: testdock
 description: Guidelines for using `github.com/n-r-w/testdock/v2` package.
 metadata:
-  version: "1.4"
+  version: "1.5"
 ---
 
 <testdock name="github.com/n-r-w/testdock/v2 guidelines">
@@ -23,14 +23,14 @@ metadata:
     14. Use WithDockerRepository, WithDockerImage, WithDockerPort, WithDockerSocketEndpoint, WithDockerEnv, and WithUnsetProxyEnv only when default Docker settings are not enough.
     15. Use WithRetryTimeout and WithTotalRetryDuration only for slow startup or PostgreSQL SQLSTATE 53300 during migration connection setup or DROP DATABASE cleanup; retry timeout must be less than total retry duration. Migration execution and other cleanup errors are never retried. Exhausted cleanup errors are logged without failing the test.
     16. Use WithCloseTimeout only for slow cleanup; close timeout must be greater than 0.
-    17. Parallel tests MUST NOT use Goose package-level state APIs (goose.SetDialect, goose.SetBaseFS, goose.Up*, goose.Down*). Use WithMigrations, WithMigrationsToVersion, ApplyMigrations, or ApplyMigrationsToVersion instead.
-      For rollback operations, create a separate goose.Provider for each temporary database.
-    18. Tests that create a goose.Provider directly MUST call Provider.Close before the migration helper returns. MUST NOT register provider cleanup with tb.Cleanup because it retains a database connection. Preserve migration and close errors with errors.Join.
+    17. Parallel tests MUST NOT use Goose package-level state APIs (goose.SetDialect, goose.SetBaseFS, goose.Up*, goose.Down*). Use WithMigrations, WithMigrationsToVersion, ApplyMigrations, ApplyMigrationsToVersion, RollbackMigrations, or RollbackMigrationsToVersion instead. Built-in Goose operations use a separate provider for each temporary database.
+    18. Use RollbackMigrations(t, dsn, dir, factory) to test all down scripts in a TestDock temporary SQL database. Use RollbackMigrationsToVersion(t, dsn, dir, factory, version) to retain migrations at or below a positive numeric file prefix, including timestamps. A target at or above the database version does not apply migrations. Use full rollback instead of version zero. Both helpers support built-in Goose and golang-migrate factories, close rollback resources before returning or failing the test, and preserve rollback and close errors together. They retry PostgreSQL connection setup on SQLSTATE 53300 with default retry settings, but never retry migration execution. MongoDB and databases created outside TestDock are outside their scope.
     19. When child PostgreSQL pgx tests use identical migrations and initial data, create one PostgresTemplate with the parent testing.TB. Pass source database options through WithPostgresTemplateOptions; they execute once.
     20. Use WithPostgresTemplateSetup for one-time shared seed data after automatic migrations. The callback MUST NOT retain source database connections after it returns because PostgreSQL requires a connection-free source while cloning.
     21. Call PostgresTemplate.GetPgxPool with each child testing.TB. Every call returns an isolated physical clone and registers child cleanup; parallel child calls are safe.
     22. Do not share one PostgresTemplate between tests that require different migration versions, initial data, or migration-transition state. Use a separate template for each identical starting state or the standard per-test helpers.
     23. Database creation, migrations, and cleanup share a limit of four concurrent operations per DSN within one test process. Separate go test package processes do not share this limit.
+    24. Custom factories used for rollback MUST return a RollbackMigrator with Down(ctx) error and DownTo(ctx, version int64) error. Each operation MUST close its resources before returning, preserve operation and close errors with errors.Join, and never apply forward migrations. Do not register migrator cleanup with tb.Cleanup because retained connections can prevent database deletion. Factories without RollbackMigrator remain usable for applying migrations; rollback helpers fail with a clear diagnostic.
   </instructions>
   <examples>
     ```go
