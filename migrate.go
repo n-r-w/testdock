@@ -310,17 +310,29 @@ func newGolangMigrateMigrator(dsn, migrationsDir string, logger ctxlog.ILogger) 
 }
 
 func (m *golangMigrateMigrator) Up(_ context.Context) error {
-	return m.m.Up()
+	return m.finishMigration(m.m.Up())
 }
 
 // UpTo applies golang-migrate migrations up to the target numeric file prefix.
 func (m *golangMigrateMigrator) UpTo(_ context.Context, version int64) error {
 	migrationVersion, err := migrationVersionToUint(version)
 	if err != nil {
-		return err
+		return m.finishMigration(err)
 	}
 
-	return m.m.Migrate(migrationVersion)
+	return m.finishMigration(m.m.Migrate(migrationVersion))
+}
+
+// finishMigration closes both golang-migrate drivers and preserves migration and close errors.
+func (m *golangMigrateMigrator) finishMigration(err error) error {
+	sourceErr, databaseErr := m.m.Close()
+	if sourceErr != nil {
+		sourceErr = fmt.Errorf("close migration source: %w", sourceErr)
+	}
+	if databaseErr != nil {
+		databaseErr = fmt.Errorf("close migration database: %w", databaseErr)
+	}
+	return errors.Join(err, sourceErr, databaseErr)
 }
 
 // migrationVersionToUint validates that the public int64 version fits golang-migrate.

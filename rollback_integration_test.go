@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/n-r-w/ctxlog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,21 +137,10 @@ func writeRollbackMigrations(t *testing.T, backend string, initial int64, broken
 	return dir
 }
 
-// applyRollbackFixtures uses the existing apply helper and closes its legacy golang-migrate connection.
-// Forward migration resource ownership is outside the rollback API change.
+// applyRollbackFixtures applies all forward migrations for a rollback test.
 func applyRollbackFixtures(t *testing.T, dsn, dir string, factory MigrateFactory) {
 	t.Helper()
-	var created Migrator
-	ApplyMigrations(t, dsn, dir, func(tb testing.TB, dsn, dir string, logger ctxlog.ILogger) (Migrator, error) {
-		m, err := factory(tb, dsn, dir, logger)
-		created = m
-		return m, err
-	})
-	if m, ok := created.(*golangMigrateMigrator); ok {
-		sourceErr, databaseErr := m.m.Close()
-		require.NoError(t, sourceErr)
-		require.NoError(t, databaseErr)
-	}
+	ApplyMigrations(t, dsn, dir, factory)
 }
 
 // assertRollbackSchema checks version metadata and every application schema change in the fixture.
