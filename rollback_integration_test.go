@@ -76,12 +76,14 @@ func TestRollbackSQLFailureClosesConnections(t *testing.T) {
 		for _, targeted := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/targeted=%t", backend.name, targeted), func(t *testing.T) {
 				t.Parallel()
-				// Arrange an independent observer database to verify child database deletion.
-				observer, _ := GetPgxPool(t, DefaultPostgresDSN, WithDockerImage(testPostgresImage))
+				// Arrange a parent-owned Docker server and an observer for child database deletion.
+				observer, server := GetPgxPool(t, DefaultPostgresDSN,
+					WithDockerImage(testPostgresImage), WithMode(RunModeDocker))
 				var databaseName string
 				t.Run("database", func(t *testing.T) {
 					dir := writeRollbackMigrations(t, backend.name, 1, true)
-					pool, info := GetPgxPool(t, DefaultPostgresDSN, WithDockerImage(testPostgresImage))
+					// External mode drops the child database; Docker mode only releases the shared container.
+					pool, info := GetPgxPool(t, server.DSN(), WithMode(RunModeExternal))
 					databaseName = info.DatabaseName()
 					applyRollbackFixtures(t, info.DSN(), dir, backend.factory)
 					tb := &fatalRecorder{TB: t, message: ""}
